@@ -238,6 +238,17 @@ impl PdRouterBase {
         // Wait for the new server to be healthy
         self.wait_for_server_health(&url).await?;
 
+        self.register_prefill_server_unchecked(url, bootstrap_port)
+    }
+
+    /// Register a prefill server without probing it first. This is used by
+    /// LMDeploy's startup-time `/nodes/add` callback, before the API server is
+    /// able to answer `/health`.
+    pub fn register_prefill_server_unchecked(
+        &self,
+        url: String,
+        bootstrap_port: Option<u16>,
+    ) -> Result<String, PDRouterError> {
         let worker_type = WorkerType::Prefill { bootstrap_port };
 
         if self.dp_size > 1 {
@@ -302,6 +313,13 @@ impl PdRouterBase {
         // Wait for the new server to be healthy
         self.wait_for_server_health(&url).await?;
 
+        self.register_decode_server_unchecked(url)
+    }
+
+    /// Register a decode server without probing it first. See
+    /// `register_prefill_server_unchecked` for why startup-time registration
+    /// must not synchronously perform a health check.
+    pub fn register_decode_server_unchecked(&self, url: String) -> Result<String, PDRouterError> {
         if self.dp_size > 1 {
             let (_base_url, dp_rank) = dp_utils::parse_worker_url(&url);
             if dp_rank.is_some() {
