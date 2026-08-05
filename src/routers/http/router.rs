@@ -1026,96 +1026,7 @@ impl Router {
             match client.get(format!("{}/health", worker_url)).send().await {
                 Ok(res) => {
                     if res.status().is_success() {
-                        if self.intra_node_data_parallel_size > 1 {
-                            // Expand worker URL into multiple DP-aware URLs based on configured intra_node_data_parallel_size
-                            // (e.g., "http://host:8000" → "http://host:8000@0", "@1", etc.)
-                            // without querying the worker
-                            let url_vec = vec![String::from(worker_url)];
-                            let dp_url_vec = dp_utils::get_dp_aware_workers(
-                                &url_vec,
-                                &self.api_key,
-                                self.intra_node_data_parallel_size,
-                            )
-                            .await
-                            .map_err(|e| format!("Failed to get dp-aware workers: {}", e))?;
-                            let mut worker_added: bool = false;
-                            for dp_url in &dp_url_vec {
-                                if self.worker_registry.get_by_url(dp_url).is_some() {
-                                    warn!("Worker {} already exists", dp_url);
-                                    continue;
-                                }
-                                info!("Added worker: {}", dp_url);
-                                // TODO: In IGW mode, fetch model_id from worker's /get_model_info endpoint
-                                let (base_url, dp_rank) = dp_utils::parse_worker_url(dp_url);
-                                let new_worker = DPAwareWorker::new(
-                                    base_url,
-                                    dp_rank.unwrap_or(0),
-                                    self.intra_node_data_parallel_size,
-                                    WorkerType::Regular,
-                                )
-                                .with_circuit_breaker_config(self.circuit_breaker_config.clone());
-
-                                let worker_arc: Arc<dyn Worker> = Arc::new(new_worker);
-                                self.worker_registry.register(worker_arc.clone());
-
-                                // Notify PolicyRegistry about the new worker
-                                let model_id = worker_arc.model_id();
-                                let policy = self.policy_registry.on_worker_added(model_id, None);
-
-                                // If this is a cache-aware policy, update it with all workers for this model
-                                if policy.name() == "cache_aware" {
-                                    if let Some(cache_aware) = policy
-                                        .as_any()
-                                        .downcast_ref::<crate::policies::CacheAwarePolicy>(
-                                    ) {
-                                        let model_workers =
-                                            self.worker_registry.get_by_model_fast(model_id);
-                                        cache_aware.init_workers(&model_workers);
-                                    }
-                                }
-
-                                worker_added = true;
-                            }
-                            if !worker_added {
-                                return Err(format!("No worker added for {}", worker_url));
-                            }
-                        } else {
-                            if self.worker_registry.get_by_url(worker_url).is_some() {
-                                return Err(format!("Worker {} already exists", worker_url));
-                            }
-                            info!("Added worker: {}", worker_url);
-
-                            // TODO: In IGW mode, fetch model_id from worker's /get_model_info endpoint
-                            let new_worker =
-                                BasicWorker::new(worker_url.to_string(), WorkerType::Regular)
-                                    .with_circuit_breaker_config(
-                                        self.circuit_breaker_config.clone(),
-                                    );
-
-                            let worker_arc = Arc::new(new_worker);
-                            self.worker_registry.register(worker_arc.clone());
-
-                            // Notify PolicyRegistry about the new worker
-                            let model_id = worker_arc.model_id();
-                            let policy = self.policy_registry.on_worker_added(model_id, None);
-
-                            // If this is a cache-aware policy, add this worker to it
-                            if policy.name() == "cache_aware" {
-                                if let Some(cache_aware) = policy
-                                    .as_any()
-                                    .downcast_ref::<crate::policies::CacheAwarePolicy>(
-                                ) {
-                                    // Get all workers for this model
-                                    let model_workers =
-                                        self.worker_registry.get_by_model_fast(model_id);
-                                    cache_aware.init_workers(&model_workers);
-                                }
-                            }
-                        }
-
-                        RouterMetrics::set_active_workers(self.worker_registry.get_all().len());
-
-                        return Ok(format!("Successfully added worker: {}", worker_url));
+                        return self.register_worker_unchecked(worker_url);
                     } else {
                         debug!(
                             "Worker {} health check pending - status: {}",
@@ -1151,6 +1062,67 @@ impl Router {
                 }
             }
         }
+    }
+
+    /// Register a worker without waiting for its HTTP server to become healthy.
+    ///
+    /// LMDeploy registers from FastAPI's startup callback, before uvicorn starts
+    /// accepting requests. Performing a synchronous health check from
+    /// `/nodes/add` would therefore deadlock registration until the router's
+    /// startup timeout expires. The central health checker takes over after the
+    /// worker has been registered.
+    pub fn register_worker_unchecked(&self, worker_url: &str) -> Result<String, String> {
+        let worker_urls = if self.intra_node_data_parallel_size > 1 {
+            (0..self.intra_node_data_parallel_size)
+                .map(|rank| format!("{}@{}", worker_url, rank))
+                .collect()
+        } else {
+            vec![worker_url.to_string()]
+        };
+
+        if worker_urls
+            .iter()
+            .any(|url| self.worker_registry.get_by_url(url).is_some())
+        {
+            return Err(format!("Worker {} already exists", worker_url));
+        }
+
+        for url in worker_urls {
+            let worker_arc: Arc<dyn Worker> = if self.intra_node_data_parallel_size > 1 {
+                let (base_url, dp_rank) = dp_utils::parse_worker_url(&url);
+                Arc::new(
+                    DPAwareWorker::new(
+                        base_url,
+                        dp_rank.unwrap_or(0),
+                        self.intra_node_data_parallel_size,
+                        WorkerType::Regular,
+                    )
+                    .with_circuit_breaker_config(self.circuit_breaker_config.clone()),
+                )
+            } else {
+                Arc::new(
+                    BasicWorker::new(url.clone(), WorkerType::Regular)
+                        .with_circuit_breaker_config(self.circuit_breaker_config.clone()),
+                )
+            };
+
+            self.worker_registry.register(worker_arc.clone());
+            let model_id = worker_arc.model_id();
+            let policy = self.policy_registry.on_worker_added(model_id, None);
+            if policy.name() == "cache_aware" {
+                if let Some(cache_aware) = policy
+                    .as_any()
+                    .downcast_ref::<crate::policies::CacheAwarePolicy>()
+                {
+                    let model_workers = self.worker_registry.get_by_model_fast(model_id);
+                    cache_aware.init_workers(&model_workers);
+                }
+            }
+            info!("Registered worker without startup health check: {}", url);
+        }
+
+        RouterMetrics::set_active_workers(self.worker_registry.get_all().len());
+        Ok(format!("Successfully added worker: {}", worker_url))
     }
 
     pub fn remove_worker(&self, worker_url: &str) {

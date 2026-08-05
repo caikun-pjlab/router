@@ -1,5 +1,12 @@
-# Dockerfile for vllm-router
+# Dockerfile for lmdeploy-router
 FROM rustlang/rust:nightly-bullseye as rust-builder
+
+# Use an Aliyun mirror matching the Debian Bullseye base image.
+RUN printf '%s\n' \
+    'deb https://mirrors.aliyun.com/debian/ bullseye main contrib non-free' \
+    'deb https://mirrors.aliyun.com/debian/ bullseye-updates main contrib non-free' \
+    'deb https://mirrors.aliyun.com/debian-security/ bullseye-security main contrib non-free' \
+    > /etc/apt/sources.list
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -15,11 +22,18 @@ WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 
-# Build the Rust binary
-RUN cargo build --release
+# Build only the LMDeploy Router binary
+RUN cargo build --release --locked --bin lmdeploy-router
 
 # Python stage with Rust binary
 FROM python:3.12-slim-bullseye
+
+# Each stage has its own filesystem, so configure the mirror again here.
+RUN printf '%s\n' \
+    'deb https://mirrors.aliyun.com/debian/ bullseye main contrib non-free' \
+    'deb https://mirrors.aliyun.com/debian/ bullseye-updates main contrib non-free' \
+    'deb https://mirrors.aliyun.com/debian-security/ bullseye-security main contrib non-free' \
+    > /etc/apt/sources.list
 
 # Install system dependencies
 RUN apt-get update && apt upgrade -y && apt-get install -y \
@@ -32,10 +46,10 @@ RUN pip3 install --upgrade pip
 WORKDIR /app
 
 # Copy the Rust binary from builder stage
-COPY --from=rust-builder /app/target/release/vllm-router /usr/local/bin/vllm-router
+COPY --from=rust-builder /app/target/release/lmdeploy-router /usr/local/bin/lmdeploy-router
 
 # Make it executable
-RUN chmod +x /usr/local/bin/vllm-router
+RUN chmod +x /usr/local/bin/lmdeploy-router
 
 # Copy Python source files for Python launcher (optional)
 COPY py_src ./py_src
@@ -52,4 +66,4 @@ EXPOSE 8080
 EXPOSE 29000
 
 # Default command to run the router using Rust binary directly
-CMD ["vllm-router", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["lmdeploy-router", "--host", "0.0.0.0", "--port", "8080"]

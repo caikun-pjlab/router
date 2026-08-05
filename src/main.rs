@@ -2,8 +2,9 @@ use clap::{ArgAction, Parser, ValueEnum};
 use std::collections::HashMap;
 use vllm_router_rs::config::{
     CircuitBreakerConfig, ConfigError, ConfigResult, ConnectionMode, DiscoveryConfig,
-    HealthCheckConfig, HistoryBackend, KvConnector, MetricsConfig, PolicyConfig, RetryConfig,
-    RouterConfig, RoutingMode, TraceConfig,
+    HealthCheckConfig, HistoryBackend, KvConnector, LMDeployMigrationProtocol, LMDeployRdmaConfig,
+    LMDeployRdmaLinkType, MetricsConfig, PolicyConfig, RetryConfig, RouterConfig, RoutingMode,
+    TraceConfig,
 };
 use vllm_router_rs::metrics::PrometheusConfig;
 use vllm_router_rs::server::{self, ServerConfig};
@@ -69,7 +70,7 @@ impl std::fmt::Display for Backend {
 }
 
 #[derive(Parser, Debug)]
-#[command(name = "vllm-router")]
+#[command(name = "lmdeploy-router")]
 #[command(version)]
 #[command(about = "VLLM Router - High-performance request distribution across worker nodes")]
 #[command(long_about = r#"
@@ -81,10 +82,21 @@ multi-node setups or when you want to start workers and router separately.
 
 Examples:
   # Regular mode
-  vllm-router --worker-urls http://worker1:8000 http://worker2:8000
+  lmdeploy-router --worker-urls http://worker1:8000 http://worker2:8000
+
+  # LMDeploy dynamic registration (start the router before the API server)
+  lmdeploy-router --host 0.0.0.0 --port 30000
+  lmdeploy serve api_server MODEL --proxy-url http://router:30000
+
+  # LMDeploy PD dynamic registration (no static URLs required)
+  lmdeploy-router --host 0.0.0.0 --port 30000 \
+    --lmdeploy-pd-disaggregation --lmdeploy-migration-protocol rdma \
+    --lmdeploy-rdma-link-type roce
+  lmdeploy serve api_server MODEL --role Prefill --proxy-url http://router:30000
+  lmdeploy serve api_server MODEL --role Decode --proxy-url http://router:30000
 
   # vLLM PD mode with pure service discovery (workers register themselves)
-  vllm-router --vllm-pd-disaggregation \
+  lmdeploy-router --vllm-pd-disaggregation \
     --vllm-discovery-address 0.0.0.0:30001 \
     --policy consistent_hash
 
@@ -102,7 +114,7 @@ struct CliArgs {
     #[arg(long, default_value_t = 30000)]
     port: u16,
 
-    /// List of worker URLs (e.g., http://worker1:8000 http://worker2:8000)
+    /// Optional worker URLs. May be omitted when LMDeploy servers register via --proxy-url.
     #[arg(long, num_args = 0..)]
     worker_urls: Vec<String>,
 
@@ -338,6 +350,26 @@ struct CliArgs {
     /// KV connector type for PD disaggregation (nixl or mooncake)
     #[arg(long, value_enum, default_value_t = KvConnector::Nixl)]
     kv_connector: KvConnector,
+
+    /// Enable lmdeploy PD disaggregation mode
+    #[arg(long = "lmdeploy-pd-disaggregation", default_value_t = false)]
+    lmdeploy_pd_disaggregation: bool,
+
+    /// Migration protocol for lmdeploy PD
+    #[arg(long = "lmdeploy-migration-protocol", value_enum, default_value_t = LMDeployMigrationProtocol::Rdma)]
+    lmdeploy_migration_protocol: LMDeployMigrationProtocol,
+
+    /// RDMA link type for lmdeploy PD
+    #[arg(long = "lmdeploy-rdma-link-type", value_enum, default_value_t = LMDeployRdmaLinkType::Roce)]
+    lmdeploy_rdma_link_type: LMDeployRdmaLinkType,
+
+    /// Disable GPU Direct RDMA for lmdeploy PD
+    #[arg(long = "lmdeploy-disable-gdr", default_value_t = false)]
+    lmdeploy_disable_gdr: bool,
+
+    /// Use dummy prefill for lmdeploy PD
+    #[arg(long = "lmdeploy-dummy-prefill", default_value_t = false)]
+    lmdeploy_dummy_prefill: bool,
 }
 
 impl CliArgs {
@@ -382,6 +414,13 @@ impl CliArgs {
         &self,
         prefill_urls: Vec<(String, Option<u16>)>,
     ) -> ConfigResult<RouterConfig> {
+        if self.vllm_pd_disaggregation && self.lmdeploy_pd_disaggregation {
+            return Err(ConfigError::ValidationFailed {
+                reason: "--vllm-pd-disaggregation and --lmdeploy-pd-disaggregation are mutually exclusive"
+                    .to_string(),
+            });
+        }
+
         // Determine routing mode
         let mode = if self.enable_igw {
             // IGW mode - routing mode is not used in IGW, but we need to provide a placeholder
@@ -447,14 +486,47 @@ impl CliArgs {
                 decode_policy: self.decode_policy.as_ref().map(|p| self.parse_policy(p)),
                 discovery_address: self.vllm_discovery_address.clone(),
             }
+        } else if self.lmdeploy_pd_disaggregation {
+            // LMDeploy PD disaggregation mode
+            // Reuse --prefill and --decode flags (same as vLLM PD mode).
+            let prefill_str_urls: Vec<String> =
+                prefill_urls.iter().map(|(u, _)| u.clone()).collect();
+            let decode_str_urls = self.decode.clone();
+
+            eprintln!("ℹ️  INFO: Using LMDeploy PD disaggregation mode.");
+            eprintln!("   Prefill URLs: {:?}", prefill_str_urls);
+            eprintln!("   Decode URLs: {:?}", decode_str_urls);
+            eprintln!(
+                "   Migration protocol: {:?}",
+                self.lmdeploy_migration_protocol
+            );
+            if self.lmdeploy_migration_protocol == LMDeployMigrationProtocol::Rdma {
+                eprintln!("   RDMA link type: {:?}", self.lmdeploy_rdma_link_type);
+                eprintln!("   GPU Direct RDMA: {}", !self.lmdeploy_disable_gdr);
+            }
+            eprintln!("   Dummy prefill: {}", self.lmdeploy_dummy_prefill);
+
+            let rdma_config = if self.lmdeploy_migration_protocol == LMDeployMigrationProtocol::Rdma
+            {
+                Some(LMDeployRdmaConfig {
+                    with_gdr: !self.lmdeploy_disable_gdr,
+                    link_type: self.lmdeploy_rdma_link_type,
+                })
+            } else {
+                None
+            };
+
+            RoutingMode::LMDeployPrefillDecode {
+                prefill_urls: prefill_str_urls,
+                decode_urls: decode_str_urls,
+                prefill_policy: self.prefill_policy.as_ref().map(|p| self.parse_policy(p)),
+                decode_policy: self.decode_policy.as_ref().map(|p| self.parse_policy(p)),
+                migration_protocol: self.lmdeploy_migration_protocol,
+                rdma_config,
+                dummy_prefill: self.lmdeploy_dummy_prefill,
+            }
         } else {
             // Regular mode
-            if !self.service_discovery && self.worker_urls.is_empty() {
-                return Err(ConfigError::ValidationFailed {
-                    reason: "Regular mode requires --worker-urls when not using service discovery"
-                        .to_string(),
-                });
-            }
             RoutingMode::Regular {
                 worker_urls: self.worker_urls.clone(),
             }
@@ -570,8 +642,8 @@ impl CliArgs {
                 check_interval: std::time::Duration::from_secs(60),
                 port: self.service_discovery_port,
                 namespace: self.service_discovery_namespace.clone(),
-                // HTTP service discovery only supports the vLLM PD router.
-                pd_mode: self.vllm_pd_disaggregation,
+                // HTTP service discovery supports both PD router implementations.
+                pd_mode: self.vllm_pd_disaggregation || self.lmdeploy_pd_disaggregation,
                 prefill_selector: Self::parse_selector(&self.prefill_selector),
                 decode_selector: Self::parse_selector(&self.decode_selector),
                 bootstrap_port_annotation: "vllm.ai/bootstrap-port".to_string(),
@@ -671,6 +743,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "OpenAI Backend".to_string()
     } else if cli_args.vllm_pd_disaggregation {
         "vLLM PD Disaggregated".to_string()
+    } else if cli_args.lmdeploy_pd_disaggregation {
+        "LMDeploy PD Disaggregated".to_string()
     } else {
         format!("Regular ({})", cli_args.backend)
     };
@@ -694,6 +768,9 @@ Provide --worker-urls or PD flags as usual.",
         if cli_args.vllm_pd_disaggregation && !prefill_urls.is_empty() {
             println!("Prefill nodes: {:?}", prefill_urls);
             println!("Decode nodes: {:?}", cli_args.decode);
+        } else if cli_args.lmdeploy_pd_disaggregation {
+            println!("LMDeploy Prefill nodes: {:?}", prefill_urls);
+            println!("LMDeploy Decode nodes: {:?}", cli_args.decode);
         }
     }
 

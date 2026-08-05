@@ -1,6 +1,8 @@
-use pyo3::prelude::*;
 pub mod config;
 pub mod logging;
+#[cfg(feature = "python")]
+use pyo3::prelude::*;
+#[cfg(feature = "python")]
 use std::collections::HashMap;
 
 pub mod core;
@@ -16,8 +18,10 @@ pub mod server;
 pub mod service_discovery;
 pub mod tokenizer;
 pub mod tree;
+#[cfg(feature = "python")]
 use crate::metrics::PrometheusConfig;
 
+#[cfg(feature = "python")]
 #[pyclass(eq)]
 #[derive(Clone, PartialEq, Debug)]
 pub enum PolicyType {
@@ -28,6 +32,7 @@ pub enum PolicyType {
     ConsistentHash,
 }
 
+#[cfg(feature = "python")]
 #[pyclass]
 #[derive(Debug, Clone, PartialEq)]
 struct Router {
@@ -97,14 +102,29 @@ struct Router {
     otlp_traces_endpoint: Option<String>,
     // KV connector for PD disaggregation ("nixl" or "mooncake")
     kv_connector: String,
+    // lmdeploy PD disaggregation
+    lmdeploy_pd_disaggregation: bool,
+    lmdeploy_migration_protocol: String,
+    lmdeploy_rdma_link_type: String,
+    lmdeploy_with_gdr: bool,
+    lmdeploy_dummy_prefill: bool,
 }
 
+#[cfg(feature = "python")]
 impl Router {
     /// Convert PyO3 Router to RouterConfig
     pub fn to_router_config(&self) -> config::ConfigResult<config::RouterConfig> {
         use config::{
             DiscoveryConfig, MetricsConfig, PolicyConfig as ConfigPolicyConfig, RoutingMode,
         };
+
+        if self.vllm_pd_disaggregation && self.lmdeploy_pd_disaggregation {
+            return Err(config::ConfigError::ValidationFailed {
+                reason:
+                    "vllm_pd_disaggregation and lmdeploy_pd_disaggregation are mutually exclusive"
+                        .to_string(),
+            });
+        }
 
         // Convert policy helper function
         let convert_policy = |policy: &PolicyType| -> ConfigPolicyConfig {
@@ -140,6 +160,58 @@ impl Router {
                 prefill_policy: self.prefill_policy.as_ref().map(convert_policy),
                 decode_policy: self.decode_policy.as_ref().map(convert_policy),
                 discovery_address: self.vllm_discovery_address.clone(),
+            }
+        } else if self.lmdeploy_pd_disaggregation {
+            let migration_protocol = match self
+                .lmdeploy_migration_protocol
+                .to_ascii_lowercase()
+                .as_str()
+            {
+                "rdma" => config::LMDeployMigrationProtocol::Rdma,
+                "nvlink" => config::LMDeployMigrationProtocol::Nvlink,
+                other => {
+                    return Err(config::ConfigError::ValidationFailed {
+                        reason: format!(
+                            "Invalid lmdeploy_migration_protocol '{}': expected 'rdma' or 'nvlink'",
+                            other
+                        ),
+                    });
+                }
+            };
+            let rdma_config = if migration_protocol == config::LMDeployMigrationProtocol::Rdma {
+                let link_type = match self.lmdeploy_rdma_link_type.to_ascii_lowercase().as_str() {
+                    "ib" => config::LMDeployRdmaLinkType::Ib,
+                    "roce" => config::LMDeployRdmaLinkType::Roce,
+                    other => {
+                        return Err(config::ConfigError::ValidationFailed {
+                            reason: format!(
+                                "Invalid lmdeploy_rdma_link_type '{}': expected 'ib' or 'roce'",
+                                other
+                            ),
+                        });
+                    }
+                };
+                Some(config::LMDeployRdmaConfig {
+                    with_gdr: self.lmdeploy_with_gdr,
+                    link_type,
+                })
+            } else {
+                None
+            };
+            RoutingMode::LMDeployPrefillDecode {
+                prefill_urls: self
+                    .prefill_urls
+                    .clone()
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|(u, _)| u.clone())
+                    .collect(),
+                decode_urls: self.decode_urls.clone().unwrap_or_default(),
+                prefill_policy: self.prefill_policy.as_ref().map(convert_policy),
+                decode_policy: self.decode_policy.as_ref().map(convert_policy),
+                migration_protocol,
+                rdma_config,
+                dummy_prefill: self.lmdeploy_dummy_prefill,
             }
         } else {
             RoutingMode::Regular {
@@ -241,6 +313,7 @@ impl Router {
     }
 }
 
+#[cfg(feature = "python")]
 #[pymethods]
 impl Router {
     #[new]
@@ -310,6 +383,12 @@ impl Router {
         otlp_traces_endpoint = None,
         // KV connector default (PD disaggregation)
         kv_connector = String::from("nixl"),
+        // lmdeploy PD disaggregation defaults
+        lmdeploy_pd_disaggregation = false,
+        lmdeploy_migration_protocol = String::from("rdma"),
+        lmdeploy_rdma_link_type = String::from("roce"),
+        lmdeploy_with_gdr = true,
+        lmdeploy_dummy_prefill = false,
     ))]
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -372,6 +451,11 @@ impl Router {
         enable_trace: bool,
         otlp_traces_endpoint: Option<String>,
         kv_connector: String,
+        lmdeploy_pd_disaggregation: bool,
+        lmdeploy_migration_protocol: String,
+        lmdeploy_rdma_link_type: String,
+        lmdeploy_with_gdr: bool,
+        lmdeploy_dummy_prefill: bool,
     ) -> PyResult<Self> {
         Ok(Router {
             host,
@@ -433,6 +517,11 @@ impl Router {
             enable_trace,
             otlp_traces_endpoint,
             kv_connector,
+            lmdeploy_pd_disaggregation,
+            lmdeploy_migration_protocol,
+            lmdeploy_rdma_link_type,
+            lmdeploy_with_gdr,
+            lmdeploy_dummy_prefill,
         })
     }
 
@@ -458,8 +547,8 @@ impl Router {
                 check_interval: std::time::Duration::from_secs(60),
                 port: self.service_discovery_port,
                 namespace: self.service_discovery_namespace.clone(),
-                // HTTP service discovery only supports the vLLM PD router.
-                pd_mode: self.vllm_pd_disaggregation,
+                // HTTP service discovery supports both PD router implementations.
+                pd_mode: self.vllm_pd_disaggregation || self.lmdeploy_pd_disaggregation,
                 prefill_selector: self.prefill_selector.clone(),
                 decode_selector: self.decode_selector.clone(),
                 bootstrap_port_annotation: self.bootstrap_port_annotation.clone(),
@@ -509,6 +598,7 @@ impl Router {
     }
 }
 
+#[cfg(feature = "python")]
 #[pymodule]
 fn vllm_router_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PolicyType>()?;
