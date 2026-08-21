@@ -1700,6 +1700,31 @@ impl RouterTrait for Router {
             request_builder = request_builder.header("Authorization", format!("Bearer {}", key));
         }
 
+        // Forward original request headers (e.g. anthropic-version, x-api-key)
+        // so protocol-specific backends receive the metadata they require.
+        // Skip content-type/content-length (set by .json(&body)), host and
+        // hop-by-hop headers, and trace headers (handled by send_client_request).
+        if let Some(hdrs) = headers {
+            for (name, value) in hdrs {
+                let name_lc = name.as_str().to_lowercase();
+                if name_lc != "content-type"
+                    && name_lc != "content-length"
+                    && name_lc != "host"
+                    && name_lc != "connection"
+                    && name_lc != "keep-alive"
+                    && name_lc != "proxy-authenticate"
+                    && name_lc != "proxy-authorization"
+                    && name_lc != "te"
+                    && name_lc != "trailers"
+                    && name_lc != "transfer-encoding"
+                    && name_lc != "upgrade"
+                    && !header_utils::TRACE_HEADER_NAMES.contains(&name_lc.as_str())
+                {
+                    request_builder = request_builder.header(name, value);
+                }
+            }
+        }
+
         // Send request
         match otel_http::send_client_request(
             request_builder,
