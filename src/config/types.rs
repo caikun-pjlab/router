@@ -331,8 +331,6 @@ pub struct DiscoveryConfig {
     pub prefill_selector: HashMap<String, String>,
     /// PD mode decode selector
     pub decode_selector: HashMap<String, String>,
-    /// Bootstrap port annotation key
-    pub bootstrap_port_annotation: String,
 }
 
 impl Default for DiscoveryConfig {
@@ -345,7 +343,6 @@ impl Default for DiscoveryConfig {
             selector: HashMap::new(),
             prefill_selector: HashMap::new(),
             decode_selector: HashMap::new(),
-            bootstrap_port_annotation: "vllm.ai/bootstrap-port".to_string(),
         }
     }
 }
@@ -1046,7 +1043,6 @@ mod tests {
         assert!(config.selector.is_empty());
         assert!(config.prefill_selector.is_empty());
         assert!(config.decode_selector.is_empty());
-        assert_eq!(config.bootstrap_port_annotation, "vllm.ai/bootstrap-port");
     }
 
     #[test]
@@ -1063,7 +1059,6 @@ mod tests {
             selector: selector.clone(),
             prefill_selector: selector.clone(),
             decode_selector: selector.clone(),
-            bootstrap_port_annotation: "custom.io/port".to_string(),
         };
 
         assert!(config.enabled);
@@ -1401,7 +1396,6 @@ mod tests {
                 selector: selectors.clone(),
                 prefill_selector: selectors.clone(),
                 decode_selector: selectors,
-                bootstrap_port_annotation: "mycompany.io/bootstrap".to_string(),
             }),
             metrics: Some(MetricsConfig {
                 port: 9999,

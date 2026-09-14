@@ -139,12 +139,7 @@ impl LMDeployPDRouter {
             dummy_prefill
         );
 
-        // PdRouterBase expects Vec<(String, Option<u16>)> for prefill (bootstrap_port).
-        // lmdeploy does not use bootstrap ports, so map to None.
-        let prefill_urls_with_ports: Vec<(String, Option<u16>)> =
-            prefill_urls.iter().map(|u| (u.clone(), None)).collect();
-
-        let pd_router = PdRouterBase::new(prefill_urls_with_ports, decode_urls, ctx).await?;
+        let pd_router = PdRouterBase::new(prefill_urls, decode_urls, ctx).await?;
 
         // Initialize policies with workers from registry
         let prefill_workers = pd_router.worker_registry.get_prefill_workers();
@@ -1024,7 +1019,7 @@ impl LMDeployPDRouter {
     }
 
     pub async fn add_prefill_server(&self, url: String) -> Result<String, PDRouterError> {
-        self.pd_router.add_prefill_server(url, None).await
+        self.pd_router.add_prefill_server(url).await
     }
 
     pub async fn add_decode_server(&self, url: String) -> Result<String, PDRouterError> {
@@ -1032,7 +1027,7 @@ impl LMDeployPDRouter {
     }
 
     pub fn register_prefill_server_unchecked(&self, url: String) -> Result<String, PDRouterError> {
-        self.pd_router.register_prefill_server_unchecked(url, None)
+        self.pd_router.register_prefill_server_unchecked(url)
     }
 
     pub fn register_decode_server_unchecked(&self, url: String) -> Result<String, PDRouterError> {

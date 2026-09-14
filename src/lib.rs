@@ -59,12 +59,11 @@ struct Router {
     service_discovery_namespace: Option<String>,
     prefill_selector: HashMap<String, String>,
     decode_selector: HashMap<String, String>,
-    bootstrap_port_annotation: String,
     prometheus_port: Option<u16>,
     prometheus_host: Option<String>,
     request_timeout_secs: u64,
     request_id_headers: Option<Vec<String>>,
-    prefill_urls: Option<Vec<(String, Option<u16>)>>,
+    prefill_urls: Option<Vec<String>>,
     decode_urls: Option<Vec<String>>,
     prefill_policy: Option<PolicyType>,
     decode_policy: Option<PolicyType>,
@@ -180,13 +179,7 @@ impl Router {
                 None
             };
             RoutingMode::LMDeployPrefillDecode {
-                prefill_urls: self
-                    .prefill_urls
-                    .clone()
-                    .unwrap_or_default()
-                    .iter()
-                    .map(|(u, _)| u.clone())
-                    .collect(),
+                prefill_urls: self.prefill_urls.clone().unwrap_or_default(),
                 decode_urls: self.decode_urls.clone().unwrap_or_default(),
                 prefill_policy: self.prefill_policy.as_ref().map(convert_policy),
                 decode_policy: self.decode_policy.as_ref().map(convert_policy),
@@ -213,7 +206,6 @@ impl Router {
                 selector: self.selector.clone(),
                 prefill_selector: self.prefill_selector.clone(),
                 decode_selector: self.decode_selector.clone(),
-                bootstrap_port_annotation: self.bootstrap_port_annotation.clone(),
             })
         } else {
             None
@@ -320,7 +312,6 @@ impl Router {
         service_discovery_namespace = None,
         prefill_selector = HashMap::new(),
         decode_selector = HashMap::new(),
-        bootstrap_port_annotation = String::from("vllm.ai/bootstrap-port"),
         prometheus_port = None,
         prometheus_host = None,
         request_timeout_secs = 1800,  // Add configurable request timeout
@@ -391,12 +382,11 @@ impl Router {
         service_discovery_namespace: Option<String>,
         prefill_selector: HashMap<String, String>,
         decode_selector: HashMap<String, String>,
-        bootstrap_port_annotation: String,
         prometheus_port: Option<u16>,
         prometheus_host: Option<String>,
         request_timeout_secs: u64,
         request_id_headers: Option<Vec<String>>,
-        prefill_urls: Option<Vec<(String, Option<u16>)>>,
+        prefill_urls: Option<Vec<String>>,
         decode_urls: Option<Vec<String>>,
         prefill_policy: Option<PolicyType>,
         decode_policy: Option<PolicyType>,
@@ -454,7 +444,6 @@ impl Router {
             service_discovery_namespace,
             prefill_selector,
             decode_selector,
-            bootstrap_port_annotation,
             prometheus_port,
             prometheus_host,
             request_timeout_secs,
@@ -521,7 +510,6 @@ impl Router {
                 pd_mode: self.lmdeploy_pd_disaggregation,
                 prefill_selector: self.prefill_selector.clone(),
                 decode_selector: self.decode_selector.clone(),
-                bootstrap_port_annotation: self.bootstrap_port_annotation.clone(),
             })
         } else {
             None

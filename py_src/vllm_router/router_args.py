@@ -16,9 +16,7 @@ class RouterArgs:
     # PD-specific configuration
     mini_lb: bool = False
     lmdeploy_pd_disaggregation: bool = False
-    prefill_urls: List[tuple] = dataclasses.field(
-        default_factory=list
-    )  # List of (url, bootstrap_port)
+    prefill_urls: List[str] = dataclasses.field(default_factory=list)
     decode_urls: List[str] = dataclasses.field(default_factory=list)
 
     # Routing policy
@@ -45,7 +43,6 @@ class RouterArgs:
     # PD service discovery configuration
     prefill_selector: Dict[str, str] = dataclasses.field(default_factory=dict)
     decode_selector: Dict[str, str] = dataclasses.field(default_factory=dict)
-    bootstrap_port_annotation: str = "vllm.ai/bootstrap-port"
     # KV connector for PD disaggregation (nixl pull-based or mooncake push-based)
     kv_connector: str = "nixl"
     # Prometheus configuration
@@ -178,11 +175,11 @@ class RouterArgs:
         )
         parser.add_argument(
             f"--{prefix}prefill",
-            nargs="+",
+            nargs=1,
             action="append",
-            help="Prefill server URL and optional bootstrap port. Can be specified multiple times. "
-            "Format: --prefill URL [BOOTSTRAP_PORT]. "
-            "BOOTSTRAP_PORT can be a port number, 'none', or omitted (defaults to none).",
+            metavar=("URL",),
+            help="Prefill server URL. Can be specified multiple times. "
+            "Format: --prefill URL.",
         )
         parser.add_argument(
             f"--{prefix}decode",
@@ -307,7 +304,6 @@ class RouterArgs:
             choices=["nixl", "mooncake", "moriio"],
             help="KV connector type for PD disaggregation. 'nixl' (default) uses NIXL's "
             "pull-based KV transfer; 'mooncake' uses Mooncake's push-based protocol "
-            "(queries each prefill node's bootstrap server for engine_id per DP rank); "
             "'moriio' uses the MoRI-IO connector (either READ or WRITE modes).",
         )
         # Prometheus configuration
@@ -494,9 +490,6 @@ class RouterArgs:
             cli_args_dict.get(f"{prefix}decode_selector", None)
         )
 
-        # Mooncake-specific annotation
-        args_dict["bootstrap_port_annotation"] = "vllm.ai/bootstrap-port"
-
         return cls(**args_dict)
 
     def _validate_router_args(self):
@@ -534,38 +527,18 @@ class RouterArgs:
     def _parse_prefill_urls(prefill_list):
         """Parse prefill URLs from --prefill arguments.
 
-        Format: --prefill URL [BOOTSTRAP_PORT]
+        Format: --prefill URL
         Example:
-            --prefill http://prefill1:8080 9000  # With bootstrap port
-            --prefill http://prefill2:8080 none  # Explicitly no bootstrap port
-            --prefill http://prefill3:8080       # Defaults to no bootstrap port
+            --prefill http://prefill1:8080
+            --prefill http://prefill2:8080
         """
         if not prefill_list:
             return []
 
         prefill_urls = []
         for prefill_args in prefill_list:
-
             url = prefill_args[0]
-
-            # Handle optional bootstrap port
-            if len(prefill_args) >= 2:
-                bootstrap_port_str = prefill_args[1]
-                # Handle 'none' as None
-                if bootstrap_port_str.lower() == "none":
-                    bootstrap_port = None
-                else:
-                    try:
-                        bootstrap_port = int(bootstrap_port_str)
-                    except ValueError:
-                        raise ValueError(
-                            f"Invalid bootstrap port: {bootstrap_port_str}. Must be a number or 'none'"
-                        )
-            else:
-                # No bootstrap port specified, default to None
-                bootstrap_port = None
-
-            prefill_urls.append((url, bootstrap_port))
+            prefill_urls.append(url)
 
         return prefill_urls
 

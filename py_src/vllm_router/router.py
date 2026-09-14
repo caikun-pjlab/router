@@ -66,7 +66,7 @@ class Router:
             for decode servers (PD mode only). Default: {}
         prometheus_port: Port to expose Prometheus metrics. Default: None
         prometheus_host: Host address to bind the Prometheus metrics server. Default: None
-        prefill_urls: List of (url, bootstrap_port) tuples for prefill servers (PD mode only)
+        prefill_urls: List of prefill server URLs (PD mode only)
         decode_urls: List of URLs for decode servers (PD mode only)
         prefill_policy: Specific load balancing policy for prefill nodes (PD mode only).
             If not specified, uses the main policy. Default: None
@@ -75,8 +75,6 @@ class Router:
         request_id_headers: List of HTTP headers to check for request IDs. If not specified,
             uses common defaults: ['x-request-id', 'x-correlation-id', 'x-trace-id', 'request-id'].
             Example: ['x-my-request-id', 'x-custom-trace-id']. Default: None
-        bootstrap_port_annotation: Kubernetes annotation name for bootstrap port (PD mode).
-            Default: 'vllm.ai/bootstrap-port'
         request_timeout_secs: Request timeout in seconds. Default: 600
         max_concurrent_requests: Maximum number of concurrent requests allowed for rate limiting. Default: 256
         queue_size: Queue size for pending requests when max concurrent limit reached (0 = no queue, return 429 immediately). Default: 100

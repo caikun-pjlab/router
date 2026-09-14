@@ -11,7 +11,7 @@ def test_pd_power_of_two_decode_attribution(router_manager, mock_workers):
     # Start two prefill and three decode mock workers via fixture
     _, prefill_urls_raw, prefill_ids = mock_workers(n=2)
     _, decode_urls_raw, decode_ids_list = mock_workers(n=3)
-    prefill_urls = [(u, None) for u in prefill_urls_raw]
+    prefill_urls = list(prefill_urls_raw)
     decode_urls = list(decode_urls_raw)
     decode_ids = set(decode_ids_list)
 
@@ -56,7 +56,7 @@ def test_pd_power_of_two_skews_to_faster_decode(router_manager, mock_workers):
     _, [decode_fast_url], [fast_id] = mock_workers(n=1)
     decode_urls_raw = [decode_slow_url, decode_fast_url]
 
-    prefill_urls = [(u, None) for u in prefill_urls_raw]
+    prefill_urls = list(prefill_urls_raw)
     decode_urls = list(decode_urls_raw)
 
     rh = router_manager.start_router(

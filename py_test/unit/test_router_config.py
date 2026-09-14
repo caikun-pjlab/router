@@ -38,8 +38,8 @@ class TestRouterConfigValidation:
             port=30000,
             lmdeploy_pd_disaggregation=True,
             prefill_urls=[
-                ("http://prefill1:8000", 9000),
-                ("http://prefill2:8000", None),
+                "http://prefill1:8000",
+                "http://prefill2:8000",
             ],
             decode_urls=["http://decode1:8001", "http://decode2:8001"],
             policy="cache_aware",
@@ -47,8 +47,8 @@ class TestRouterConfigValidation:
 
         assert args.lmdeploy_pd_disaggregation is True
         assert args.prefill_urls == [
-            ("http://prefill1:8000", 9000),
-            ("http://prefill2:8000", None),
+            "http://prefill1:8000",
+            "http://prefill2:8000",
         ]
         assert args.decode_urls == ["http://decode1:8001", "http://decode2:8001"]
         assert args.policy == "cache_aware"
@@ -227,13 +227,11 @@ class TestRouterConfigValidation:
             service_discovery=True,
             prefill_selector={"app": "prefill"},
             decode_selector={"app": "decode"},
-            bootstrap_port_annotation="vllm.ai/bootstrap-port",
         )
         assert args.lmdeploy_pd_disaggregation is True
         assert args.service_discovery is True
         assert args.prefill_selector == {"app": "prefill"}
         assert args.decode_selector == {"app": "decode"}
-        assert args.bootstrap_port_annotation == "vllm.ai/bootstrap-port"
 
     def test_prometheus_config_validation(self):
         """Test Prometheus configuration validation."""
@@ -279,7 +277,7 @@ class TestRouterConfigValidation:
         # Test with both prefill and decode policies specified
         args = RouterArgs(
             lmdeploy_pd_disaggregation=True,
-            prefill_urls=[("http://prefill1:8000", None)],
+            prefill_urls=["http://prefill1:8000"],
             decode_urls=["http://decode1:8001"],
             policy="cache_aware",
             prefill_policy="power_of_two",
@@ -301,7 +299,7 @@ class TestRouterConfigValidation:
         # Test with only prefill policy specified
         args = RouterArgs(
             lmdeploy_pd_disaggregation=True,
-            prefill_urls=[("http://prefill1:8000", None)],
+            prefill_urls=["http://prefill1:8000"],
             decode_urls=["http://decode1:8001"],
             policy="cache_aware",
             prefill_policy="power_of_two",

@@ -557,7 +557,7 @@ fn registered_lmdeploy_role(state: &AppState, node_url: &str) -> Option<u8> {
         .find(|worker| worker.url() == node_url || worker.url().starts_with(&dp_prefix))
         .map(|worker| match worker.worker_type() {
             WorkerType::Regular => LMDEPLOY_ROLE_HYBRID,
-            WorkerType::Prefill { .. } => LMDEPLOY_ROLE_PREFILL,
+            WorkerType::Prefill => LMDEPLOY_ROLE_PREFILL,
             WorkerType::Decode => LMDEPLOY_ROLE_DECODE,
         })
 }
@@ -822,12 +822,12 @@ async fn list_workers_rest(
         let workers = state.context.worker_registry.get_all();
         let response = serde_json::json!({
             "workers": workers.iter().map(|worker| {
-                let mut worker_info = serde_json::json!({
+                let worker_info = serde_json::json!({
                     "url": worker.url(),
                     "model_id": worker.model_id(),
                     "worker_type": match worker.worker_type() {
                         WorkerType::Regular => "regular",
-                        WorkerType::Prefill { .. } => "prefill",
+                        WorkerType::Prefill => "prefill",
                         WorkerType::Decode => "decode",
                     },
                     "is_healthy": worker.is_healthy(),
@@ -836,11 +836,6 @@ async fn list_workers_rest(
                     "priority": worker.priority(),
                     "cost": worker.cost(),
                 });
-
-                // Add bootstrap_port for Prefill workers
-                if let WorkerType::Prefill { bootstrap_port } = worker.worker_type() {
-                    worker_info["bootstrap_port"] = serde_json::json!(bootstrap_port);
-                }
 
                 worker_info
             }).collect::<Vec<_>>(),

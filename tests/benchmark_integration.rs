@@ -127,12 +127,7 @@ fn default_completion_request() -> CompletionRequest {
 
 #[allow(dead_code)]
 fn create_test_worker() -> BasicWorker {
-    BasicWorker::new(
-        "http://test-server:8000".to_string(),
-        WorkerType::Prefill {
-            bootstrap_port: Some(5678),
-        },
-    )
+    BasicWorker::new("http://test-server:8000".to_string(), WorkerType::Prefill)
 }
 
 #[test]

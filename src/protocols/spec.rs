@@ -781,7 +781,7 @@ pub struct CompletionRequest {
     #[serde(default)]
     pub return_hidden_states: bool,
 
-    /// Additional fields including bootstrap info for PD routing
+    /// Additional fields passed through transparently to the backend
     #[serde(flatten)]
     pub other: serde_json::Map<String, serde_json::Value>,
 }

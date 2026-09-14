@@ -137,8 +137,8 @@ class TestLaunchRouter(unittest.TestCase):
             lmdeploy_pd_disaggregation=True,
             policy="power_of_two",  # PowerOfTwo is only valid in PD mode
             prefill=[
-                ["http://prefill1:8080", "9000"],
-                ["http://prefill2:8080", "none"],
+                ["http://prefill1:8080"],
+                ["http://prefill2:8080"],
             ],
             decode=[
                 ["http://decode1:8081"],
@@ -153,9 +153,9 @@ class TestLaunchRouter(unittest.TestCase):
         self.assertEqual(len(router_args.prefill_urls), 2)
         self.assertEqual(len(router_args.decode_urls), 2)
 
-        # Verify the parsed URLs and bootstrap ports
-        self.assertEqual(router_args.prefill_urls[0], ("http://prefill1:8080", 9000))
-        self.assertEqual(router_args.prefill_urls[1], ("http://prefill2:8080", None))
+        # Verify the parsed URLs
+        self.assertEqual(router_args.prefill_urls[0], "http://prefill1:8080")
+        self.assertEqual(router_args.prefill_urls[1], "http://prefill2:8080")
         self.assertEqual(router_args.decode_urls[0], "http://decode1:8081")
         self.assertEqual(router_args.decode_urls[1], "http://decode2:8081")
 
@@ -163,10 +163,7 @@ class TestLaunchRouter(unittest.TestCase):
         router = Router(
             worker_urls=[],  # Empty for PD mode
             lmdeploy_pd_disaggregation=True,
-            prefill_urls=[
-                ("http://prefill1:8080", 9000),
-                ("http://prefill2:8080", None),
-            ],
+            prefill_urls=["http://prefill1:8080", "http://prefill2:8080"],
             decode_urls=["http://decode1:8081", "http://decode2:8081"],
             policy=PolicyType.CacheAware,
             host="127.0.0.1",

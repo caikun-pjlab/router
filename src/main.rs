@@ -10,32 +10,14 @@ use vllm_router_rs::metrics::PrometheusConfig;
 use vllm_router_rs::server::{self, ServerConfig};
 use vllm_router_rs::service_discovery::ServiceDiscoveryConfig;
 
-// Helper function to parse prefill arguments from command line
-// Returns prefill_entries with (URL, optional_bootstrap_port)
-fn parse_prefill_args() -> Vec<(String, Option<u16>)> {
+fn parse_prefill_args() -> Vec<String> {
     let args: Vec<String> = std::env::args().collect();
     let mut prefill_entries = Vec::new();
     let mut i = 0;
 
     while i < args.len() {
         if args[i] == "--prefill" && i + 1 < args.len() {
-            let url = args[i + 1].clone();
-
-            let bootstrap_port = if i + 2 < args.len() && !args[i + 2].starts_with("--") {
-                // Check if next arg is a port number
-                if let Ok(port) = args[i + 2].parse::<u16>() {
-                    i += 1; // Skip the port argument
-                    Some(port)
-                } else if args[i + 2].to_lowercase() == "none" {
-                    i += 1; // Skip the "none" argument
-                    None
-                } else {
-                    None
-                }
-            } else {
-                None
-            };
-            prefill_entries.push((url, bootstrap_port));
+            prefill_entries.push(args[i + 1].clone());
             i += 2; // Skip --prefill and URL
         } else {
             i += 1;
@@ -388,10 +370,7 @@ impl CliArgs {
     }
 
     /// Convert CLI arguments to RouterConfig
-    fn to_router_config(
-        &self,
-        prefill_urls: Vec<(String, Option<u16>)>,
-    ) -> ConfigResult<RouterConfig> {
+    fn to_router_config(&self, prefill_urls: Vec<String>) -> ConfigResult<RouterConfig> {
         // Determine routing mode
         let mode = if self.enable_igw {
             // IGW mode - routing mode is not used in IGW, but we need to provide a placeholder
@@ -405,13 +384,10 @@ impl CliArgs {
             }
         } else if self.lmdeploy_pd_disaggregation {
             // LMDeploy PD disaggregation mode
-            // Reuse --prefill and --decode flags (same as vLLM PD mode).
-            let prefill_str_urls: Vec<String> =
-                prefill_urls.iter().map(|(u, _)| u.clone()).collect();
             let decode_str_urls = self.decode.clone();
 
             eprintln!("ℹ️  INFO: Using LMDeploy PD disaggregation mode.");
-            eprintln!("   Prefill URLs: {:?}", prefill_str_urls);
+            eprintln!("   Prefill URLs: {:?}", prefill_urls);
             eprintln!("   Decode URLs: {:?}", decode_str_urls);
             eprintln!(
                 "   Migration protocol: {:?}",
@@ -434,7 +410,7 @@ impl CliArgs {
             };
 
             RoutingMode::LMDeployPrefillDecode {
-                prefill_urls: prefill_str_urls,
+                prefill_urls,
                 decode_urls: decode_str_urls,
                 prefill_policy: self.prefill_policy.as_ref().map(|p| self.parse_policy(p)),
                 decode_policy: self.decode_policy.as_ref().map(|p| self.parse_policy(p)),
@@ -462,7 +438,6 @@ impl CliArgs {
                 selector: Self::parse_selector(&self.selector),
                 prefill_selector: Self::parse_selector(&self.prefill_selector),
                 decode_selector: Self::parse_selector(&self.decode_selector),
-                bootstrap_port_annotation: "vllm.ai/bootstrap-port".to_string(),
             })
         } else {
             None
@@ -562,7 +537,6 @@ impl CliArgs {
                 pd_mode: self.lmdeploy_pd_disaggregation,
                 prefill_selector: Self::parse_selector(&self.prefill_selector),
                 decode_selector: Self::parse_selector(&self.decode_selector),
-                bootstrap_port_annotation: "vllm.ai/bootstrap-port".to_string(),
             })
         } else {
             None
@@ -626,14 +600,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if raw_args[i] == "--prefill" && i + 1 < raw_args.len() {
             // Skip --prefill and its URL
             i += 2;
-
-            // Also skip bootstrap port if present
-            if i < raw_args.len()
-                && !raw_args[i].starts_with("--")
-                && (raw_args[i].parse::<u16>().is_ok() || raw_args[i].to_lowercase() == "none")
-            {
-                i += 1;
-            }
         } else {
             filtered_args.push(raw_args[i].clone());
             i += 1;

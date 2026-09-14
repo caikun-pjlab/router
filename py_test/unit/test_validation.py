@@ -33,16 +33,16 @@ class TestURLValidation:
     def test_valid_prefill_urls(self):
         """Test validation of valid prefill URLs."""
         valid_prefill_urls = [
-            ("http://prefill1:8000", 9000),
-            ("https://prefill2:8000", None),
-            ("http://localhost:8000", 9000),
-            ("http://127.0.0.1:8000", None),
+            "http://prefill1:8000",
+            "https://prefill2:8000",
+            "http://localhost:8000",
+            "http://127.0.0.1:8000",
         ]
 
-        for url, bootstrap_port in valid_prefill_urls:
-            args = RouterArgs(prefill_urls=[(url, bootstrap_port)])
+        for url in valid_prefill_urls:
+            args = RouterArgs(prefill_urls=[url])
             # Should not raise any validation errors
-            assert (url, bootstrap_port) in args.prefill_urls
+            assert url in args.prefill_urls
 
     def test_valid_decode_urls(self):
         """Test validation of valid decode URLs."""
@@ -99,15 +99,6 @@ class TestPortValidation:
             # Currently, invalid ports are accepted
             # This might be something to improve in the future
             assert args.port == port
-
-    def test_bootstrap_port_validation(self):
-        """Test validation of bootstrap ports in PD mode."""
-        valid_bootstrap_ports = [1, 80, 9000, 30000, 65535, None]
-
-        for bootstrap_port in valid_bootstrap_ports:
-            args = RouterArgs(prefill_urls=[("http://prefill1:8000", bootstrap_port)])
-            assert args.prefill_urls[0][1] == bootstrap_port
-
 
 class TestParameterValidation:
     """Test parameter validation logic."""
@@ -281,7 +272,7 @@ class TestConfigurationValidation:
         # Valid PD configuration
         args = RouterArgs(
             lmdeploy_pd_disaggregation=True,
-            prefill_urls=[("http://prefill1:8000", 9000)],
+            prefill_urls=["http://prefill1:8000"],
             decode_urls=["http://decode1:8001"],
         )
 
@@ -337,7 +328,7 @@ class TestConfigurationValidation:
             for decode_policy in valid_policies:
                 args = RouterArgs(
                     lmdeploy_pd_disaggregation=True,
-                    prefill_urls=[("http://prefill1:8000", None)],
+                    prefill_urls=["http://prefill1:8000"],
                     decode_urls=["http://decode1:8001"],
                     prefill_policy=prefill_policy,
                     decode_policy=decode_policy,
@@ -471,7 +462,7 @@ class TestLaunchValidation:
         """Test launching with valid PD configuration."""
         args = RouterArgs(
             lmdeploy_pd_disaggregation=True,
-            prefill_urls=[("http://prefill1:8000", 9000)],
+            prefill_urls=["http://prefill1:8000"],
             decode_urls=["http://decode1:8001"],
             policy="cache_aware",
         )

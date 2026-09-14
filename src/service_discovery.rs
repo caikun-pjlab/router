@@ -30,8 +30,6 @@ pub struct ServiceDiscoveryConfig {
     pub pd_mode: bool,
     pub prefill_selector: HashMap<String, String>,
     pub decode_selector: HashMap<String, String>,
-    // Bootstrap port annotation specific to mooncake implementation
-    pub bootstrap_port_annotation: String,
 }
 
 impl Default for ServiceDiscoveryConfig {
@@ -45,7 +43,6 @@ impl Default for ServiceDiscoveryConfig {
             pd_mode: false,
             prefill_selector: HashMap::new(),
             decode_selector: HashMap::new(),
-            bootstrap_port_annotation: "vllm.ai/bootstrap-port".to_string(),
         }
     }
 }
@@ -66,7 +63,6 @@ pub struct PodInfo {
     pub status: String,
     pub is_ready: bool,
     pub pod_type: Option<PodType>,
-    pub bootstrap_port: Option<u16>,
 }
 
 impl PodInfo {
@@ -138,28 +134,12 @@ impl PodInfo {
             None
         };
 
-        // Extract bootstrap port from annotations for prefill pods
-        let bootstrap_port = if matches!(pod_type, Some(PodType::Prefill)) {
-            if let Some(config) = config {
-                pod.metadata
-                    .annotations
-                    .as_ref()
-                    .and_then(|annotations| annotations.get(&config.bootstrap_port_annotation))
-                    .and_then(|port_str| port_str.parse::<u16>().ok())
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
         Some(PodInfo {
             name,
             ip: pod_ip,
             status: pod_status,
             is_ready,
             pod_type,
-            bootstrap_port,
         })
     }
 
@@ -542,21 +522,15 @@ mod tests {
     }
 
     // Helper function to create a Pod with PD-specific labels and annotations
-    fn create_pd_k8s_pod(name: &str, ip: &str, pod_type: &str, bootstrap_port: Option<u16>) -> Pod {
+    fn create_pd_k8s_pod(name: &str, ip: &str, pod_type: &str) -> Pod {
         let mut labels = std::collections::BTreeMap::new();
         labels.insert("app".to_string(), "vllm".to_string());
         labels.insert("component".to_string(), pod_type.to_string());
-
-        let mut annotations = std::collections::BTreeMap::new();
-        if let Some(port) = bootstrap_port {
-            annotations.insert("vllm.ai/bootstrap-port".to_string(), port.to_string());
-        }
 
         Pod {
             metadata: ObjectMeta {
                 name: Some(name.to_string()),
                 labels: Some(labels),
-                annotations: Some(annotations),
                 ..Default::default()
             },
             spec: Some(PodSpec::default()),
@@ -629,7 +603,6 @@ mod tests {
             pd_mode: true,
             prefill_selector,
             decode_selector,
-            bootstrap_port_annotation: "vllm.ai/bootstrap-port".to_string(),
         }
     }
 
@@ -638,15 +611,15 @@ mod tests {
         let config = create_pd_config();
 
         // Test prefill pod should be included
-        let prefill_pod = create_pd_k8s_pod("prefill-pod", "10.0.0.1", "prefill", Some(8081));
+        let prefill_pod = create_pd_k8s_pod("prefill-pod", "10.0.0.1", "prefill");
         assert!(PodInfo::should_include(&prefill_pod, &config));
 
         // Test decode pod should be included
-        let decode_pod = create_pd_k8s_pod("decode-pod", "10.0.0.2", "decode", None);
+        let decode_pod = create_pd_k8s_pod("decode-pod", "10.0.0.2", "decode");
         assert!(PodInfo::should_include(&decode_pod, &config));
 
         // Test unmatched pod should not be included
-        let unmatched_pod = create_pd_k8s_pod("other-pod", "10.0.0.3", "other", None);
+        let unmatched_pod = create_pd_k8s_pod("other-pod", "10.0.0.3", "other");
         assert!(!PodInfo::should_include(&unmatched_pod, &config));
 
         // Test regular mode
@@ -656,7 +629,7 @@ mod tests {
             .insert("app".to_string(), "vllm".to_string());
         regular_config.pd_mode = false;
 
-        let regular_pod = create_pd_k8s_pod("worker-pod", "10.0.0.4", "worker", None);
+        let regular_pod = create_pd_k8s_pod("worker-pod", "10.0.0.4", "worker");
         assert!(PodInfo::should_include(&regular_pod, &regular_config));
     }
 
@@ -671,7 +644,6 @@ mod tests {
         assert!(!config.pd_mode);
         assert!(config.prefill_selector.is_empty());
         assert!(config.decode_selector.is_empty());
-        assert_eq!(config.bootstrap_port_annotation, "vllm.ai/bootstrap-port");
     }
 
     #[test]
@@ -701,12 +673,11 @@ mod tests {
         assert_eq!(pod_info.status, "Running");
         assert!(pod_info.is_ready);
         assert!(pod_info.pod_type.is_none());
-        assert!(pod_info.bootstrap_port.is_none());
     }
 
     #[test]
     fn test_pod_info_from_pod_with_pd_config_prefill() {
-        let k8s_pod = create_pd_k8s_pod("prefill-pod", "10.0.0.1", "prefill", Some(8081));
+        let k8s_pod = create_pd_k8s_pod("prefill-pod", "10.0.0.1", "prefill");
         let config = create_pd_config();
 
         let pod_info = PodInfo::from_pod(&k8s_pod, Some(&config)).unwrap();
@@ -715,12 +686,11 @@ mod tests {
         assert_eq!(pod_info.status, "Running");
         assert!(pod_info.is_ready);
         assert_eq!(pod_info.pod_type, Some(PodType::Prefill));
-        assert_eq!(pod_info.bootstrap_port, Some(8081));
     }
 
     #[test]
     fn test_pod_info_from_pod_with_pd_config_decode() {
-        let k8s_pod = create_pd_k8s_pod("decode-pod", "10.0.0.2", "decode", None);
+        let k8s_pod = create_pd_k8s_pod("decode-pod", "10.0.0.2", "decode");
         let config = create_pd_config();
 
         let pod_info = PodInfo::from_pod(&k8s_pod, Some(&config)).unwrap();
@@ -729,12 +699,11 @@ mod tests {
         assert_eq!(pod_info.status, "Running");
         assert!(pod_info.is_ready);
         assert_eq!(pod_info.pod_type, Some(PodType::Decode));
-        assert!(pod_info.bootstrap_port.is_none());
     }
 
     #[test]
     fn test_pod_info_from_pod_with_pd_config_regular_mode() {
-        let k8s_pod = create_pd_k8s_pod("regular-pod", "10.0.0.3", "worker", None);
+        let k8s_pod = create_pd_k8s_pod("regular-pod", "10.0.0.3", "worker");
         let mut config = create_pd_config();
         config.pd_mode = false; // Set to regular mode
 
@@ -744,12 +713,11 @@ mod tests {
         assert_eq!(pod_info.status, "Running");
         assert!(pod_info.is_ready);
         assert_eq!(pod_info.pod_type, Some(PodType::Regular));
-        assert!(pod_info.bootstrap_port.is_none());
     }
 
     #[test]
     fn test_pod_info_from_pod_with_pd_config_unmatched_labels() {
-        let k8s_pod = create_pd_k8s_pod("unknown-pod", "10.0.0.4", "unknown", None);
+        let k8s_pod = create_pd_k8s_pod("unknown-pod", "10.0.0.4", "unknown");
         let config = create_pd_config();
 
         let pod_info = PodInfo::from_pod(&k8s_pod, Some(&config)).unwrap();
@@ -758,23 +726,6 @@ mod tests {
         assert_eq!(pod_info.status, "Running");
         assert!(pod_info.is_ready);
         assert_eq!(pod_info.pod_type, Some(PodType::Regular));
-        assert!(pod_info.bootstrap_port.is_none());
-    }
-
-    #[test]
-    fn test_pod_info_from_pod_with_pd_config_invalid_bootstrap_port() {
-        let mut pod = create_pd_k8s_pod("prefill-pod", "10.0.0.1", "prefill", None);
-        // Add invalid bootstrap port annotation
-        pod.metadata
-            .annotations
-            .as_mut()
-            .unwrap()
-            .insert("vllm.ai/bootstrap-port".to_string(), "invalid".to_string());
-        let config = create_pd_config();
-
-        let pod_info = PodInfo::from_pod(&pod, Some(&config)).unwrap();
-        assert_eq!(pod_info.pod_type, Some(PodType::Prefill));
-        assert!(pod_info.bootstrap_port.is_none()); // Should be None for invalid port
     }
 
     #[test]
@@ -837,7 +788,6 @@ mod tests {
             status: "Running".into(),
             is_ready: true,
             pod_type: None,
-            bootstrap_port: None,
         };
         assert!(healthy_pod.is_healthy());
 
@@ -847,7 +797,6 @@ mod tests {
             status: "Running".into(),
             is_ready: false,
             pod_type: None,
-            bootstrap_port: None,
         };
         assert!(!not_ready_pod.is_healthy());
 
@@ -857,7 +806,6 @@ mod tests {
             status: "Pending".into(),
             is_ready: true,
             pod_type: None,
-            bootstrap_port: None,
         };
         assert!(!not_running_pod.is_healthy());
     }
@@ -870,7 +818,6 @@ mod tests {
             status: "Running".into(),
             is_ready: true,
             pod_type: None,
-            bootstrap_port: None,
         };
         assert_eq!(pod_info.worker_url(8080), "http://1.2.3.4:8080");
     }
@@ -883,7 +830,6 @@ mod tests {
             status: "Running".into(),
             is_ready: true,
             pod_type: None,
-            bootstrap_port: None,
         };
         assert_eq!(
             pod_info.worker_url(8000),
@@ -899,7 +845,6 @@ mod tests {
             status: "Running".into(),
             is_ready: true,
             pod_type: Some(PodType::Prefill),
-            bootstrap_port: Some(8081),
         };
 
         let pod2 = PodInfo {
@@ -908,7 +853,6 @@ mod tests {
             status: "Running".into(),
             is_ready: true,
             pod_type: Some(PodType::Prefill),
-            bootstrap_port: Some(8081),
         };
 
         let pod3 = PodInfo {
@@ -917,7 +861,6 @@ mod tests {
             status: "Running".into(),
             is_ready: true,
             pod_type: Some(PodType::Decode),
-            bootstrap_port: None,
         };
 
         assert_eq!(pod1, pod2);
@@ -934,7 +877,6 @@ mod tests {
             status: "Pending".into(),
             is_ready: false,
             pod_type: None,
-            bootstrap_port: None,
         };
         let port = 8080u16;
 
@@ -963,7 +905,6 @@ mod tests {
             status: "Running".into(),
             is_ready: true,
             pod_type: None,
-            bootstrap_port: None,
         };
         let port = 8080u16;
 
@@ -990,7 +931,6 @@ mod tests {
             status: "Running".into(),
             is_ready: true,
             pod_type: Some(PodType::Prefill),
-            bootstrap_port: Some(8081),
         };
         let port = 8080u16;
 
@@ -1019,7 +959,6 @@ mod tests {
             status: "Running".into(),
             is_ready: true,
             pod_type: Some(PodType::Decode),
-            bootstrap_port: None,
         };
         let port = 8080u16;
 
@@ -1046,7 +985,6 @@ mod tests {
             status: "Running".into(),
             is_ready: true,
             pod_type: Some(PodType::Prefill),
-            bootstrap_port: Some(8081),
         };
 
         // Add pod to tracked set first
@@ -1080,7 +1018,6 @@ mod tests {
             status: "Running".into(),
             is_ready: true,
             pod_type: Some(PodType::Decode),
-            bootstrap_port: None,
         };
         let port = 8080u16;
 
@@ -1109,7 +1046,6 @@ mod tests {
             status: "Running".into(),
             is_ready: true,
             pod_type: Some(PodType::Regular),
-            bootstrap_port: None,
         };
         let port = 8080u16;
 
@@ -1137,7 +1073,6 @@ mod tests {
             status: "Running".into(),
             is_ready: true,
             pod_type: Some(PodType::Prefill),
-            bootstrap_port: Some(8081),
         };
         let port = 8080u16;
 
@@ -1165,7 +1100,6 @@ mod tests {
             status: "Running".into(),
             is_ready: true,
             pod_type: Some(PodType::Decode),
-            bootstrap_port: None,
         };
 
         // Add pod to tracked set first

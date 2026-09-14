@@ -112,12 +112,9 @@ impl RouterManager {
 
         if !workers.is_empty() {
             // Determine router based on worker types
-            let has_pd_workers = workers.iter().any(|w| {
-                matches!(
-                    w.worker_type(),
-                    WorkerType::Prefill { .. } | WorkerType::Decode
-                )
-            });
+            let has_pd_workers = workers
+                .iter()
+                .any(|w| matches!(w.worker_type(), WorkerType::Prefill | WorkerType::Decode));
 
             let router_id = if has_pd_workers {
                 RouterId::new("http-pd".to_string())
@@ -193,7 +190,6 @@ impl RouterManager {
         let worker = match config.worker_type.as_deref() {
             Some("prefill") => WorkerFactory::create_prefill_with_labels(
                 config.url.clone(),
-                config.bootstrap_port,
                 labels.clone(),
                 CircuitBreakerConfig::default(),
             ),
@@ -352,7 +348,7 @@ impl RouterManager {
             cost: worker.cost(),
             worker_type: match worker.worker_type() {
                 WorkerType::Regular => "regular".to_string(),
-                WorkerType::Prefill { .. } => "prefill".to_string(),
+                WorkerType::Prefill => "prefill".to_string(),
                 WorkerType::Decode => "decode".to_string(),
             },
             is_healthy: worker.is_healthy(),
@@ -458,7 +454,6 @@ impl WorkerManagement for RouterManager {
             priority: None,
             cost: None,
             labels: std::collections::HashMap::new(),
-            bootstrap_port: None,
         };
 
         match self.add_worker(config).await {

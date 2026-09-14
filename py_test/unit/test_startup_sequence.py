@@ -147,7 +147,7 @@ class TestRouterInitialization:
         """Test router initialization in PD mode."""
         args = RouterArgs(
             lmdeploy_pd_disaggregation=True,
-            prefill_urls=[("http://prefill1:8000", 9000)],
+            prefill_urls=["http://prefill1:8000"],
             decode_urls=["http://decode1:8001"],
             policy="power_of_two",
         )
@@ -174,7 +174,7 @@ class TestRouterInitialization:
             # Verify Router.from_args was called with PD parameters
             router_mod.from_args.assert_called_once()
             assert captured_args["lmdeploy_pd_disaggregation"] is True
-            assert captured_args["prefill_urls"] == [("http://prefill1:8000", 9000)]
+            assert captured_args["prefill_urls"] == ["http://prefill1:8000"]
             assert captured_args["decode_urls"] == ["http://decode1:8001"]
             assert captured_args["policy"] == PolicyType.PowerOfTwo
 
@@ -506,7 +506,7 @@ class TestStartupValidation:
         """Test policy warning during startup in PD mode."""
         args = RouterArgs(
             lmdeploy_pd_disaggregation=True,
-            prefill_urls=[("http://prefill1:8000", None)],
+            prefill_urls=["http://prefill1:8000"],
             decode_urls=["http://decode1:8001"],
             policy="cache_aware",
             prefill_policy="power_of_two",
@@ -537,7 +537,7 @@ class TestStartupValidation:
         # Test with only prefill policy specified
         args = RouterArgs(
             lmdeploy_pd_disaggregation=True,
-            prefill_urls=[("http://prefill1:8000", None)],
+            prefill_urls=["http://prefill1:8000"],
             decode_urls=["http://decode1:8001"],
             policy="cache_aware",
             prefill_policy="power_of_two",
@@ -565,7 +565,7 @@ class TestStartupValidation:
         """Test policy info logging during startup with only decode policy specified."""
         args = RouterArgs(
             lmdeploy_pd_disaggregation=True,
-            prefill_urls=[("http://prefill1:8000", None)],
+            prefill_urls=["http://prefill1:8000"],
             decode_urls=["http://decode1:8001"],
             policy="cache_aware",
             prefill_policy=None,
@@ -667,8 +667,8 @@ class TestStartupFlow:
         args = RouterArgs(
             lmdeploy_pd_disaggregation=True,
             prefill_urls=[
-                ("http://prefill1:8000", 9000),
-                ("http://prefill2:8000", None),
+                "http://prefill1:8000",
+                "http://prefill2:8000",
             ],
             decode_urls=["http://decode1:8001", "http://decode2:8001"],
             policy="power_of_two",

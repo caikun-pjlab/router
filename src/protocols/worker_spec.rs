@@ -27,10 +27,6 @@ pub struct WorkerConfigRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub worker_type: Option<String>,
 
-    /// Bootstrap port for prefill workers (optional)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub bootstrap_port: Option<u16>,
-
     /// Additional labels (optional)
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub labels: HashMap<String, String>,

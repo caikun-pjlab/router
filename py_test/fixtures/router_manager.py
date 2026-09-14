@@ -28,7 +28,7 @@ class RouterManager:
         extra: Optional[Dict] = None,
         # PD options
         lmdeploy_pd_disaggregation: bool = False,
-        prefill_urls: Optional[List[tuple]] = None,
+        prefill_urls: Optional[List[str]] = None,
         decode_urls: Optional[List[str]] = None,
         prefill_policy: Optional[str] = None,
         decode_policy: Optional[str] = None,
@@ -58,11 +58,8 @@ class RouterManager:
         if lmdeploy_pd_disaggregation:
             cmd.append("--lmdeploy-pd-disaggregation")
             if prefill_urls:
-                for url, bport in prefill_urls:
-                    if bport is None:
-                        cmd.extend(["--prefill", url, "none"])
-                    else:
-                        cmd.extend(["--prefill", url, str(bport)])
+                for url in prefill_urls:
+                    cmd.extend(["--prefill", url])
             if decode_urls:
                 for url in decode_urls:
                     cmd.extend(["--decode", url])

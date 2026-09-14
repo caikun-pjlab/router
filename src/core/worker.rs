@@ -190,10 +190,7 @@ pub enum WorkerType {
     /// Regular worker for standard routing
     Regular,
     /// Prefill worker for PD disaggregated mode
-    Prefill {
-        /// Bootstrap port for communication with decode workers
-        bootstrap_port: Option<u16>,
-    },
+    Prefill,
     /// Decode worker for PD disaggregated mode
     Decode,
 }
@@ -202,10 +199,7 @@ impl fmt::Display for WorkerType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             WorkerType::Regular => write!(f, "Regular"),
-            WorkerType::Prefill { bootstrap_port } => match bootstrap_port {
-                Some(port) => write!(f, "Prefill(bootstrap:{})", port),
-                None => write!(f, "Prefill"),
-            },
+            WorkerType::Prefill => write!(f, "Prefill"),
             WorkerType::Decode => write!(f, "Decode"),
         }
     }
@@ -451,22 +445,18 @@ impl WorkerFactory {
         )
     }
 
-    /// Create a prefill worker with optional bootstrap port
-    pub fn create_prefill(url: String, bootstrap_port: Option<u16>) -> Box<dyn Worker> {
-        Box::new(BasicWorker::new(
-            url,
-            WorkerType::Prefill { bootstrap_port },
-        ))
+    /// Create a prefill worker
+    pub fn create_prefill(url: String) -> Box<dyn Worker> {
+        Box::new(BasicWorker::new(url, WorkerType::Prefill))
     }
 
     /// Create a prefill worker with custom circuit breaker configuration
     pub fn create_prefill_with_config(
         url: String,
-        bootstrap_port: Option<u16>,
         circuit_breaker_config: CircuitBreakerConfig,
     ) -> Box<dyn Worker> {
         Box::new(
-            BasicWorker::new(url, WorkerType::Prefill { bootstrap_port })
+            BasicWorker::new(url, WorkerType::Prefill)
                 .with_circuit_breaker_config(circuit_breaker_config),
         )
     }
@@ -491,7 +481,7 @@ impl WorkerFactory {
     #[allow(clippy::type_complexity)]
     pub fn create_from_urls(
         regular_urls: Vec<String>,
-        prefill_urls: Vec<(String, Option<u16>)>,
+        prefill_urls: Vec<String>,
         decode_urls: Vec<String>,
     ) -> (
         Vec<Box<dyn Worker>>,
@@ -501,10 +491,8 @@ impl WorkerFactory {
         let regular_workers: Vec<Box<dyn Worker>> =
             regular_urls.into_iter().map(Self::create_regular).collect();
 
-        let prefill_workers: Vec<Box<dyn Worker>> = prefill_urls
-            .into_iter()
-            .map(|(url, port)| Self::create_prefill(url, port))
-            .collect();
+        let prefill_workers: Vec<Box<dyn Worker>> =
+            prefill_urls.into_iter().map(Self::create_prefill).collect();
 
         let decode_workers: Vec<Box<dyn Worker>> =
             decode_urls.into_iter().map(Self::create_decode).collect();
@@ -530,11 +518,10 @@ impl WorkerFactory {
     /// Create a prefill worker with labels
     pub fn create_prefill_with_labels(
         url: String,
-        bootstrap_port: Option<u16>,
         labels: std::collections::HashMap<String, String>,
         circuit_breaker_config: CircuitBreakerConfig,
     ) -> Box<dyn Worker> {
-        let mut worker = BasicWorker::new(url.clone(), WorkerType::Prefill { bootstrap_port })
+        let mut worker = BasicWorker::new(url.clone(), WorkerType::Prefill)
             .with_circuit_breaker_config(circuit_breaker_config);
 
         // Add labels to metadata
@@ -760,20 +747,7 @@ mod tests {
     #[test]
     fn test_worker_type_display() {
         assert_eq!(WorkerType::Regular.to_string(), "Regular");
-        assert_eq!(
-            WorkerType::Prefill {
-                bootstrap_port: Some(8080)
-            }
-            .to_string(),
-            "Prefill(bootstrap:8080)"
-        );
-        assert_eq!(
-            WorkerType::Prefill {
-                bootstrap_port: None
-            }
-            .to_string(),
-            "Prefill"
-        );
+        assert_eq!(WorkerType::Prefill.to_string(), "Prefill");
         assert_eq!(WorkerType::Decode.to_string(), "Decode");
     }
 
@@ -781,29 +755,12 @@ mod tests {
     fn test_worker_type_equality() {
         assert_eq!(WorkerType::Regular, WorkerType::Regular);
         assert_ne!(WorkerType::Regular, WorkerType::Decode);
-        assert_eq!(
-            WorkerType::Prefill {
-                bootstrap_port: Some(8080)
-            },
-            WorkerType::Prefill {
-                bootstrap_port: Some(8080)
-            }
-        );
-        assert_ne!(
-            WorkerType::Prefill {
-                bootstrap_port: Some(8080)
-            },
-            WorkerType::Prefill {
-                bootstrap_port: Some(8081)
-            }
-        );
+        assert_eq!(WorkerType::Prefill, WorkerType::Prefill);
     }
 
     #[test]
     fn test_worker_type_clone() {
-        let original = WorkerType::Prefill {
-            bootstrap_port: Some(8080),
-        };
+        let original = WorkerType::Prefill;
         let cloned = original.clone();
         assert_eq!(original, cloned);
     }
@@ -888,18 +845,8 @@ mod tests {
         let regular = BasicWorker::new("http://test:8080".to_string(), WorkerType::Regular);
         assert_eq!(regular.worker_type(), WorkerType::Regular);
 
-        let prefill = BasicWorker::new(
-            "http://test:8080".to_string(),
-            WorkerType::Prefill {
-                bootstrap_port: Some(9090),
-            },
-        );
-        assert_eq!(
-            prefill.worker_type(),
-            WorkerType::Prefill {
-                bootstrap_port: Some(9090)
-            }
-        );
+        let prefill = BasicWorker::new("http://test:8080".to_string(), WorkerType::Prefill);
+        assert_eq!(prefill.worker_type(), WorkerType::Prefill);
 
         let decode = BasicWorker::new("http://test:8080".to_string(), WorkerType::Decode);
         assert_eq!(decode.worker_type(), WorkerType::Decode);
@@ -1061,24 +1008,9 @@ mod tests {
 
     #[test]
     fn test_create_prefill_worker() {
-        // With bootstrap port
-        let worker1 = WorkerFactory::create_prefill("http://prefill:8080".to_string(), Some(9090));
-        assert_eq!(worker1.url(), "http://prefill:8080");
-        assert_eq!(
-            worker1.worker_type(),
-            WorkerType::Prefill {
-                bootstrap_port: Some(9090)
-            }
-        );
-
-        // Without bootstrap port
-        let worker2 = WorkerFactory::create_prefill("http://prefill:8080".to_string(), None);
-        assert_eq!(
-            worker2.worker_type(),
-            WorkerType::Prefill {
-                bootstrap_port: None
-            }
-        );
+        let worker = WorkerFactory::create_prefill("http://prefill:8080".to_string());
+        assert_eq!(worker.url(), "http://prefill:8080");
+        assert_eq!(worker.worker_type(), WorkerType::Prefill);
     }
 
     #[test]
@@ -1095,8 +1027,8 @@ mod tests {
             "http://regular2:8080".to_string(),
         ];
         let prefill_urls = vec![
-            ("http://prefill1:8080".to_string(), Some(9090)),
-            ("http://prefill2:8080".to_string(), None),
+            "http://prefill1:8080".to_string(),
+            "http://prefill2:8080".to_string(),
         ];
         let decode_urls = vec![
             "http://decode1:8080".to_string(),

@@ -73,30 +73,22 @@ class TestRouterArgs:
 
     def test_parse_prefill_urls_valid(self):
         """Test parsing valid prefill URL arguments."""
-        # Test with bootstrap port
-        result = RouterArgs._parse_prefill_urls([["http://prefill1:8000", "9000"]])
-        assert result == [("http://prefill1:8000", 9000)]
-
-        # Test with 'none' bootstrap port
-        result = RouterArgs._parse_prefill_urls([["http://prefill1:8000", "none"]])
-        assert result == [("http://prefill1:8000", None)]
-
-        # Test without bootstrap port
+        # Test a single prefill URL
         result = RouterArgs._parse_prefill_urls([["http://prefill1:8000"]])
-        assert result == [("http://prefill1:8000", None)]
+        assert result == ["http://prefill1:8000"]
 
         # Test multiple prefill URLs
         result = RouterArgs._parse_prefill_urls(
             [
-                ["http://prefill1:8000", "9000"],
-                ["http://prefill2:8000", "none"],
+                ["http://prefill1:8000"],
+                ["http://prefill2:8000"],
                 ["http://prefill3:8000"],
             ]
         )
         expected = [
-            ("http://prefill1:8000", 9000),
-            ("http://prefill2:8000", None),
-            ("http://prefill3:8000", None),
+            "http://prefill1:8000",
+            "http://prefill2:8000",
+            "http://prefill3:8000",
         ]
         assert result == expected
 
@@ -107,12 +99,6 @@ class TestRouterArgs:
         # Test None
         result = RouterArgs._parse_prefill_urls(None)
         assert result == []
-
-    def test_parse_prefill_urls_invalid(self):
-        """Test parsing invalid prefill URL arguments."""
-        # Test invalid bootstrap port
-        with pytest.raises(ValueError, match="Invalid bootstrap port"):
-            RouterArgs._parse_prefill_urls([["http://prefill1:8000", "invalid"]])
 
     def test_parse_decode_urls_valid(self):
         """Test parsing valid decode URL arguments."""
@@ -254,13 +240,13 @@ class TestRouterArgs:
             worker_urls=[],
             policy="cache_aware",
             prefill=[
-                ["http://prefill1:8000", "9000"],
-                ["http://prefill2:8000", "none"],
+                ["http://prefill1:8000"],
+                ["http://prefill2:8000"],
             ],
             decode=[["http://decode1:8001"], ["http://decode2:8001"]],
             router_prefill=[
-                ["http://prefill1:8000", "9000"],
-                ["http://prefill2:8000", "none"],
+                ["http://prefill1:8000"],
+                ["http://prefill2:8000"],
             ],
             router_decode=[["http://decode1:8001"], ["http://decode2:8001"]],
             router_policy="cache_aware",
@@ -317,8 +303,8 @@ class TestRouterArgs:
         # Test PD configuration
         assert router_args.lmdeploy_pd_disaggregation is True
         assert router_args.prefill_urls == [
-            ("http://prefill1:8000", 9000),
-            ("http://prefill2:8000", None),
+            "http://prefill1:8000",
+            "http://prefill2:8000",
         ]
         assert router_args.decode_urls == ["http://decode1:8001", "http://decode2:8001"]
         assert router_args.prefill_policy == "power_of_two"
@@ -437,10 +423,8 @@ class TestParseRouterArgs:
             "--lmdeploy-pd-disaggregation",
             "--prefill",
             "http://prefill1:8000",
-            "9000",
             "--prefill",
             "http://prefill2:8000",
-            "none",
             "--decode",
             "http://decode1:8001",
             "--decode",
@@ -455,8 +439,8 @@ class TestParseRouterArgs:
 
         assert router_args.lmdeploy_pd_disaggregation is True
         assert router_args.prefill_urls == [
-            ("http://prefill1:8000", 9000),
-            ("http://prefill2:8000", None),
+            "http://prefill1:8000",
+            "http://prefill2:8000",
         ]
         assert router_args.decode_urls == ["http://decode1:8001", "http://decode2:8001"]
         assert router_args.prefill_policy == "power_of_two"
@@ -594,8 +578,8 @@ class TestParseRouterArgs:
         with pytest.raises(SystemExit):
             parse_router_args(["--policy", "invalid_policy"])
 
-        # Test invalid bootstrap port
-        with pytest.raises(ValueError, match="Invalid bootstrap port"):
+        # --prefill only accepts a single URL
+        with pytest.raises(SystemExit):
             parse_router_args(
                 [
                     "--lmdeploy-pd-disaggregation",

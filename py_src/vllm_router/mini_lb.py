@@ -3,10 +3,8 @@ Minimal HTTP load balancer for prefill and decode servers for testing.
 """
 
 import asyncio
-import ipaddress
 import logging
 import random
-import urllib
 from http import HTTPStatus
 from itertools import chain
 from typing import Optional
@@ -25,14 +23,6 @@ AIOHTTP_STREAM_READ_CHUNK_SIZE = (
 )  # 64KB, to prevent aiohttp's "Chunk too big" error
 
 
-def maybe_wrap_ipv6_address(address: str) -> str:
-    try:
-        ipaddress.IPv6Address(address)
-        return f"[{address}]"
-    except ValueError:
-        return address
-
-
 class MiniLoadBalancer:
     def __init__(
         self,
@@ -43,8 +33,7 @@ class MiniLoadBalancer:
         self.host = router_args.host
         self.port = router_args.port
         self.timeout = router_args.request_timeout_secs
-        self.prefill_urls = [url[0] for url in router_args.prefill_urls]
-        self.prefill_bootstrap_ports = [url[1] for url in router_args.prefill_urls]
+        self.prefill_urls = router_args.prefill_urls
         self.decode_urls = router_args.decode_urls
 
     def _validate_router_args(self, router_args: RouterArgs):
@@ -75,11 +64,7 @@ class MiniLoadBalancer:
         assert len(self.decode_urls) > 0, "No decode servers available"
         pidx = random.randint(0, len(self.prefill_urls) - 1)
         didx = random.randint(0, len(self.decode_urls) - 1)
-        return (
-            self.prefill_urls[pidx],
-            self.prefill_bootstrap_ports[pidx],
-            self.decode_urls[didx],
-        )
+        return self.prefill_urls[pidx], self.decode_urls[didx]
 
     async def generate(
         self, modified_request, prefill_server, decode_server, endpoint
@@ -288,68 +273,31 @@ async def get_model_info():
 
 @app.post("/generate")
 async def handle_generate_request(request_data: dict):
-    prefill_server, bootstrap_port, decode_server = lb.select_pair()
-
-    # Parse and transform prefill_server for bootstrap data
-    parsed_url = urllib.parse.urlparse(prefill_server)
-    hostname = maybe_wrap_ipv6_address(parsed_url.hostname)
-    modified_request = request_data.copy()
-
-    batch_size = _get_request_batch_size(modified_request)
-    if batch_size is not None:
-        modified_request.update(
-            {
-                "bootstrap_host": [hostname] * batch_size,
-                "bootstrap_port": [bootstrap_port] * batch_size,
-                "bootstrap_room": [
-                    _generate_bootstrap_room() for _ in range(batch_size)
-                ],
-            }
-        )
-    else:
-        modified_request.update(
-            {
-                "bootstrap_host": hostname,
-                "bootstrap_port": bootstrap_port,
-                "bootstrap_room": _generate_bootstrap_room(),
-            }
-        )
+    prefill_server, decode_server = lb.select_pair()
 
     if request_data.get("stream", False):
         return await lb.generate_stream(
-            modified_request, prefill_server, decode_server, "generate"
+            request_data, prefill_server, decode_server, "generate"
         )
     else:
         return await lb.generate(
-            modified_request, prefill_server, decode_server, "generate"
+            request_data, prefill_server, decode_server, "generate"
         )
 
 
 async def _forward_to_backend(request_data: dict, endpoint_name: str):
-    prefill_server, bootstrap_port, decode_server = lb.select_pair()
-
-    # Parse and transform prefill_server for bootstrap data
-    parsed_url = urllib.parse.urlparse(prefill_server)
-    hostname = maybe_wrap_ipv6_address(parsed_url.hostname)
-    modified_request = request_data.copy()
-    modified_request.update(
-        {
-            "bootstrap_host": hostname,
-            "bootstrap_port": bootstrap_port,
-            "bootstrap_room": _generate_bootstrap_room(),
-        }
-    )
+    prefill_server, decode_server = lb.select_pair()
 
     if request_data.get("stream", False):
         return await lb.generate_stream(
-            modified_request,
+            request_data,
             prefill_server,
             decode_server,
             endpoint=endpoint_name,
         )
     else:
         return await lb.generate(
-            modified_request,
+            request_data,
             prefill_server,
             decode_server,
             endpoint=endpoint_name,
@@ -364,20 +312,6 @@ async def handle_chat_completion_request(request_data: dict):
 @app.post("/v1/completions")
 async def handle_completion_request(request_data: dict):
     return await _forward_to_backend(request_data, "v1/completions")
-
-
-def _generate_bootstrap_room():
-    return random.randint(0, 2**63 - 1)
-
-
-# We may utilize `GenerateReqInput`'s logic later
-def _get_request_batch_size(request):
-    if (text := request.get("text")) is not None:
-        return None if isinstance(text, str) else len(text)
-    if (input_ids := request.get("input_ids")) is not None:
-        return None if isinstance(input_ids[0], int) else len(input_ids)
-    return None
-
 
 @app.get("/v1/models")
 async def get_models():

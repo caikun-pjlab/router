@@ -217,31 +217,22 @@ impl PdRouterBase {
         }
     }
 
-    pub async fn add_prefill_server(
-        &self,
-        url: String,
-        bootstrap_port: Option<u16>,
-    ) -> Result<String, PDRouterError> {
+    pub async fn add_prefill_server(&self, url: String) -> Result<String, PDRouterError> {
         // Wait for the new server to be healthy
         self.wait_for_server_health(&url).await?;
 
-        self.register_prefill_server_unchecked(url, bootstrap_port)
+        self.register_prefill_server_unchecked(url)
     }
 
     /// Register a prefill server without probing it first. This is used by
     /// LMDeploy's startup-time `/nodes/add` callback, before the API server is
     /// able to answer `/health`.
-    pub fn register_prefill_server_unchecked(
-        &self,
-        url: String,
-        bootstrap_port: Option<u16>,
-    ) -> Result<String, PDRouterError> {
+    pub fn register_prefill_server_unchecked(&self, url: String) -> Result<String, PDRouterError> {
         if self.worker_registry.get_by_url(&url).is_some() {
             return Err(PDRouterError::WorkerAlreadyExists { url: url.clone() });
         }
         let worker_arc: Arc<dyn Worker> = Arc::from(WorkerFactory::create_prefill_with_config(
             url.clone(),
-            bootstrap_port,
             self.circuit_breaker_config.clone(),
         ));
         self.register_and_notify(worker_arc);
@@ -367,7 +358,7 @@ impl PdRouterBase {
 
     #[allow(clippy::too_many_arguments)]
     pub async fn new(
-        prefill_urls: Vec<(String, Option<u16>)>,
+        prefill_urls: Vec<String>,
         decode_urls: Vec<String>,
         ctx: &Arc<crate::server::AppContext>,
     ) -> Result<Self, String> {
@@ -391,13 +382,10 @@ impl PdRouterBase {
         };
 
         // Register prefill workers in the registry
-        for (url, port) in prefill_urls {
+        for url in prefill_urls {
             prefill_workers_urls.push(url.clone());
-            let worker_type = WorkerType::Prefill {
-                bootstrap_port: port,
-            };
             let worker: Arc<dyn Worker> = Arc::new(
-                BasicWorker::new(url, worker_type)
+                BasicWorker::new(url, WorkerType::Prefill)
                     .with_circuit_breaker_config(core_cb_config.clone())
                     .with_health_config(health_config.clone()),
             );
@@ -505,7 +493,7 @@ impl PdRouterBase {
             self.worker_registry
                 .get_by_model_fast(model)
                 .into_iter()
-                .filter(|w| matches!(w.worker_type(), WorkerType::Prefill { .. }))
+                .filter(|w| matches!(w.worker_type(), WorkerType::Prefill))
                 .collect()
         } else {
             self.worker_registry.get_prefill_workers()
@@ -683,7 +671,7 @@ impl PdRouterBase {
         // Remove from registry
         if let Some(worker) = self.worker_registry.remove_by_url(worker_url) {
             match worker.worker_type() {
-                WorkerType::Prefill { .. } => {
+                WorkerType::Prefill => {
                     info!("Removed prefill worker: {}", worker_url);
                 }
                 WorkerType::Decode => {
@@ -713,7 +701,7 @@ impl PdRouterBase {
             if !worker.is_healthy() {
                 all_healthy = false;
                 let worker_type = match worker.worker_type() {
-                    WorkerType::Prefill { .. } => "Prefill",
+                    WorkerType::Prefill => "Prefill",
                     WorkerType::Decode => "Decode",
                     _ => "Worker",
                 };
@@ -875,13 +863,7 @@ impl PdRouterBase {
     pub async fn flush_cache(&self) -> Response {
         // Process both prefill and decode workers
         let (prefill_results, prefill_errors) = self
-            .process_workers(
-                WorkerType::Prefill {
-                    bootstrap_port: None,
-                },
-                "Prefill",
-                "flush_cache",
-            )
+            .process_workers(WorkerType::Prefill, "Prefill", "flush_cache")
             .await;
         let (decode_results, decode_errors) = self
             .process_workers(WorkerType::Decode, "Decode", "flush_cache")
@@ -1040,9 +1022,7 @@ mod tests {
         // Add a worker first
         let worker = create_test_worker(
             "http://localhost:8000".to_string(),
-            WorkerType::Prefill {
-                bootstrap_port: Some(8080),
-            },
+            WorkerType::Prefill,
             true,
         );
         router.worker_registry.register(Arc::from(worker));
@@ -1061,20 +1041,8 @@ mod tests {
         let router = create_test_pd_router();
 
         // Add servers first
-        let worker1 = create_test_worker(
-            "http://worker1".to_string(),
-            WorkerType::Prefill {
-                bootstrap_port: None,
-            },
-            true,
-        );
-        let worker2 = create_test_worker(
-            "http://worker2".to_string(),
-            WorkerType::Prefill {
-                bootstrap_port: Some(8080),
-            },
-            true,
-        );
+        let worker1 = create_test_worker("http://worker1".to_string(), WorkerType::Prefill, true);
+        let worker2 = create_test_worker("http://worker2".to_string(), WorkerType::Prefill, true);
 
         router.worker_registry.register(Arc::from(worker1));
         router.worker_registry.register(Arc::from(worker2));
@@ -1133,13 +1101,7 @@ mod tests {
         assert_eq!(workers.len(), 0);
 
         // Add a worker
-        let worker = create_test_worker(
-            "http://test".to_string(),
-            WorkerType::Prefill {
-                bootstrap_port: None,
-            },
-            true,
-        );
+        let worker = create_test_worker("http://test".to_string(), WorkerType::Prefill, true);
         router.worker_registry.register(Arc::from(worker));
 
         let workers = router.worker_registry.get_all();
@@ -1156,20 +1118,10 @@ mod tests {
         let router = create_test_pd_router();
 
         // Add mix of healthy and unhealthy workers
-        let healthy_worker = create_test_worker(
-            "http://healthy".to_string(),
-            WorkerType::Prefill {
-                bootstrap_port: None,
-            },
-            true,
-        );
-        let unhealthy_worker = create_test_worker(
-            "http://unhealthy".to_string(),
-            WorkerType::Prefill {
-                bootstrap_port: None,
-            },
-            false,
-        );
+        let healthy_worker =
+            create_test_worker("http://healthy".to_string(), WorkerType::Prefill, true);
+        let unhealthy_worker =
+            create_test_worker("http://unhealthy".to_string(), WorkerType::Prefill, false);
         let decode_worker =
             create_test_worker("http://decode".to_string(), WorkerType::Decode, true);
 
@@ -1206,9 +1158,7 @@ mod tests {
         // Add healthy workers - create_test_worker returns Box<dyn Worker>, convert to Arc
         let prefill_worker = create_test_worker(
             "http://localhost:8000".to_string(),
-            WorkerType::Prefill {
-                bootstrap_port: None,
-            },
+            WorkerType::Prefill,
             true,
         );
         let decode_worker = create_test_worker(
@@ -1277,13 +1227,7 @@ mod tests {
             let router_clone = Arc::clone(&router);
             let url = format!("http://worker{}", i);
             let handle = tokio::spawn(async move {
-                let worker = create_test_worker(
-                    url,
-                    WorkerType::Prefill {
-                        bootstrap_port: None,
-                    },
-                    true,
-                );
+                let worker = create_test_worker(url, WorkerType::Prefill, true);
                 router_clone.worker_registry.register(Arc::from(worker));
             });
             handles.push(handle);

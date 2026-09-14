@@ -15,15 +15,9 @@ mod test_pd_routing {
         use vllm_router_rs::core::{WorkerFactory, WorkerType};
 
         // Test worker creation for prefill servers
-        let prefill_worker =
-            WorkerFactory::create_prefill("http://prefill:8080".to_string(), Some(9000));
+        let prefill_worker = WorkerFactory::create_prefill("http://prefill:8080".to_string());
         assert_eq!(prefill_worker.url(), "http://prefill:8080");
-        match prefill_worker.worker_type() {
-            WorkerType::Prefill { bootstrap_port } => {
-                assert_eq!(bootstrap_port, Some(9000));
-            }
-            _ => panic!("Expected Prefill worker type"),
-        }
+        assert_eq!(prefill_worker.worker_type(), WorkerType::Prefill);
 
         // Test worker creation for decode servers
         let decode_worker = WorkerFactory::create_decode("http://decode:8080".to_string());

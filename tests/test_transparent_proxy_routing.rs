@@ -388,9 +388,7 @@ mod transparent_proxy_routing_tests {
             .map(|i| {
                 Arc::new(BasicWorker::new(
                     format!("http://prefill{}:8080", i + 1),
-                    WorkerType::Prefill {
-                        bootstrap_port: None,
-                    },
+                    WorkerType::Prefill,
                 )) as Arc<dyn Worker>
             })
             .collect();
@@ -445,9 +443,7 @@ mod transparent_proxy_routing_tests {
             .map(|i| {
                 Arc::new(BasicWorker::new(
                     format!("http://prefill{}:8080", i + 1),
-                    WorkerType::Prefill {
-                        bootstrap_port: None,
-                    },
+                    WorkerType::Prefill,
                 )) as Arc<dyn Worker>
             })
             .collect();
