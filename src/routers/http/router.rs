@@ -2011,8 +2011,8 @@ mod tests {
 
     #[test]
     fn test_inline_header_conversion_matches_headers_to_request_headers() {
-        // Verify that the inline header conversion pattern used in vllm_pd_router
-        // produces the same result as Router::headers_to_request_headers.
+        // Verify that the inline header conversion pattern used by transparent
+        // proxy routes matches Router::headers_to_request_headers.
         let mut header_map = HeaderMap::new();
         header_map.insert("X-Session-Id", HeaderValue::from_static("session-abc"));
         header_map.insert("Content-Type", HeaderValue::from_static("application/json"));
@@ -2021,7 +2021,7 @@ mod tests {
         // Method 1: Router::headers_to_request_headers (used in router.rs)
         let method1 = Router::headers_to_request_headers(Some(&header_map)).unwrap();
 
-        // Method 2: Inline conversion (used in vllm_pd_router.rs)
+        // Method 2: Inline conversion used by transparent proxy routes.
         let method2: HashMap<String, String> = header_map
             .iter()
             .filter_map(|(name, value)| {

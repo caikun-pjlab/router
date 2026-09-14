@@ -4,7 +4,7 @@
 //! implementations (Router, LMDeployPDRouter):
 //!   1. Headers are passed to select_worker_with_headers() for consistent hash routing
 //!   2. Workers are filtered by is_available() before selection
-//!   3. The inline header conversion pattern (used in vllm_pd_router) matches
+//!   3. The inline header conversion pattern used by transparent proxy routes matches
 //!      the Router::headers_to_request_headers() output
 
 #[cfg(test)]
@@ -277,7 +277,7 @@ mod transparent_proxy_routing_tests {
     // =====================================================================
     // Test 4: Inline header conversion correctness
     // =====================================================================
-    // vllm_pd_router.rs uses an inline pattern to convert
+    // Transparent proxy routes use an inline pattern to convert
     // HeaderMap → HashMap<String, String>. Verify it produces correct output.
 
     #[test]
@@ -290,7 +290,7 @@ mod transparent_proxy_routing_tests {
         header_map.insert("X-USER-ID", HeaderValue::from_static("user-456"));
         header_map.insert("content-type", HeaderValue::from_static("application/json"));
 
-        // Simulate the inline pattern from vllm_pd_router.rs
+        // Simulate the transparent proxy inline conversion.
         let request_headers: Option<HashMap<String, String>> = Some(&header_map).map(|h| {
             h.iter()
                 .filter_map(|(name, value)| {
@@ -319,7 +319,7 @@ mod transparent_proxy_routing_tests {
         let policy = ConsistentHashPolicy::new();
         let workers = create_workers(3);
 
-        // Convert via the inline pattern (as vllm_pd_router does)
+        // Convert via the transparent proxy inline pattern.
         let mut header_map = HeaderMap::new();
         header_map.insert(
             "x-session-id",
@@ -378,7 +378,7 @@ mod transparent_proxy_routing_tests {
     // =====================================================================
     // Test 5: PD mode worker pair selection with headers
     // =====================================================================
-    // For vllm_pd_router, both prefill and decode workers need headers.
+    // For PD routers, both prefill and decode workers need headers.
 
     #[test]
     fn test_pd_mode_worker_pair_with_headers() {
@@ -407,7 +407,7 @@ mod transparent_proxy_routing_tests {
         let headers = make_headers(&[("x-session-id", "pd-session")]);
         let body = r#"{"prompt": "test"}"#;
 
-        // select_worker_with_headers on each pool (as vllm_pd_router now does)
+        // select_worker_with_headers on each pool
         let prefill_idx = policy
             .select_worker_with_headers(&prefill_workers, Some(body), Some(&headers))
             .expect("Should select prefill worker");
