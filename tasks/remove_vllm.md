@@ -134,7 +134,8 @@ rg -n 'zmq|rmp_serde|rmp-serde|vllm_service_discovery' src tests py_src py_test 
 ```
 
 **完成标准**
-- 最后一个搜索除 `Cargo.lock` 历史性外部包名外无业务引用；如 `Cargo.lock` 仍含包名，需说明依赖树来源或确认为零引用后更新。
+- `Cargo.toml`/`Cargo.lock` 不再包含 `zmq`、`rmp`、`rmp-serde` 及其 ZMQ 传递依赖；
+  代码和测试中唯一允许保留的是 LMDeploy API 响应字段中的 `zmq_address` 字符串。
 
 ### 任务 5：移除 intra-node DP-aware 路由
 

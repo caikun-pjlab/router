@@ -6,4 +6,3 @@ pub mod openai_router;
 pub mod pd_router;
 pub mod pd_types;
 pub mod router;
-pub mod vllm_service_discovery;
