@@ -33,9 +33,6 @@ class RouterArgs:
     eviction_interval_secs: int = 120
     max_tree_size: int = 2**26
     max_payload_size: int = 512 * 1024 * 1024  # 512MB default for large batches
-    intra_node_data_parallel_size: int = (
-        1  # Intra-node data parallel size (DP-aware routing automatically enabled when > 1)
-    )
     enable_igw: bool = False  # Enable IGW (Inter-Gateway) mode for multi-model support
     api_key: Optional[str] = None
     log_dir: Optional[str] = None
@@ -243,12 +240,6 @@ class RouterArgs:
             help="Maximum payload size in bytes",
         )
         parser.add_argument(
-            f"--{prefix}intra-node-data-parallel-size",
-            type=int,
-            default=RouterArgs.intra_node_data_parallel_size,
-            help="Intra-node data parallel size for DP-aware routing (automatically enabled when > 1, default: 1)",
-        )
-        parser.add_argument(
             f"--{prefix}enable-igw",
             action="store_true",
             help="Enable IGW (Inference-Gateway) mode for multi-model support",
@@ -257,7 +248,7 @@ class RouterArgs:
             f"--{prefix}api-key",
             type=str,
             default=None,
-            help="The API key used for authorization with workers. Required when using intra-node data parallel routing (intra_node_data_parallel_size > 1).",
+            help="The API key used for authorization with workers.",
         )
         parser.add_argument(
             f"--{prefix}log-dir",

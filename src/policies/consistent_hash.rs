@@ -312,19 +312,6 @@ impl ConsistentHashPolicy {
 
         selected_worker
     }
-
-    /// Handle DP-aware routing by extracting DP rank from worker URL
-    fn extract_dp_info(&self, worker_url: &str) -> (String, Option<usize>) {
-        if worker_url.contains('@') {
-            let parts: Vec<&str> = worker_url.split('@').collect();
-            if parts.len() == 2 {
-                if let Ok(dp_rank) = parts[1].parse::<usize>() {
-                    return (parts[0].to_string(), Some(dp_rank));
-                }
-            }
-        }
-        (worker_url.to_string(), None)
-    }
 }
 
 impl LoadBalancingPolicy for ConsistentHashPolicy {
@@ -381,24 +368,12 @@ impl LoadBalancingPolicy for ConsistentHashPolicy {
             }
         };
 
-        // Handle DP-aware routing - extract base URL if needed
-        let (base_url, dp_rank) = self.extract_dp_info(&target_worker_url);
-
         // Find the worker index that matches our target
-        let selected_idx = if let Some(_dp_rank) = dp_rank {
-            // For DP-aware routing, find exact match including DP rank
-            workers.iter().position(|w| w.url() == target_worker_url)
-        } else {
-            // For regular routing, find by base URL
-            workers.iter().position(|w| {
-                let (worker_base_url, _) = self.extract_dp_info(w.url());
-                worker_base_url == base_url
-            })
-        };
+        let selected_idx = workers.iter().position(|w| w.url() == target_worker_url);
 
         debug!(
-            "CONSISTENT_HASH_DEBUG: Target worker URL: {}, DP rank: {:?}",
-            target_worker_url, dp_rank
+            "CONSISTENT_HASH_DEBUG: Target worker URL: {}",
+            target_worker_url
         );
 
         match selected_idx {

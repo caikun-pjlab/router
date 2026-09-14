@@ -28,28 +28,6 @@ mod consistent_hash_policy_tests {
         ]
     }
 
-    /// Helper function to create DP-aware test workers
-    fn create_dp_test_workers() -> Vec<Arc<dyn Worker>> {
-        vec![
-            Arc::new(BasicWorker::new(
-                "http://worker1:8000@0".to_string(), // DP rank 0
-                WorkerType::Regular,
-            )),
-            Arc::new(BasicWorker::new(
-                "http://worker2:8000@1".to_string(), // DP rank 1
-                WorkerType::Regular,
-            )),
-            Arc::new(BasicWorker::new(
-                "http://worker3:8000@2".to_string(), // DP rank 2
-                WorkerType::Regular,
-            )),
-            Arc::new(BasicWorker::new(
-                "http://worker4:8000@3".to_string(), // DP rank 3
-                WorkerType::Regular,
-            )),
-        ]
-    }
-
     #[test]
     fn test_consistent_hash_policy_creation() {
         let policy = ConsistentHashPolicy::new();
@@ -138,32 +116,6 @@ mod consistent_hash_policy_tests {
             min_count,
             expected_per_worker
         );
-    }
-
-    #[test]
-    fn test_dp_aware_routing() {
-        let policy = ConsistentHashPolicy::new();
-        let workers = create_dp_test_workers();
-
-        let session_id = "dp_test_session";
-        let request_json = format!(
-            r#"{{"session_params": {{"session_id": "{}"}}, "prompt": "dp test"}}"#,
-            session_id
-        );
-
-        // Test that DP-aware routing works
-        if let Some(worker_idx) = policy.select_worker(&workers, Some(&request_json)) {
-            assert!(
-                worker_idx < workers.len(),
-                "Selected worker index should be valid"
-            );
-
-            let worker_url = workers[worker_idx].url();
-            assert!(
-                worker_url.contains('@'),
-                "DP-aware worker URLs should contain '@' for rank"
-            );
-        }
     }
 
     #[test]

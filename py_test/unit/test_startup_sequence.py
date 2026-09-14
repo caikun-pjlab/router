@@ -701,7 +701,6 @@ class TestStartupFlow:
             selector={"app": "worker"},
             service_discovery_port=8080,
             service_discovery_namespace="default",
-            intra_node_data_parallel_size=2,
             api_key="test-key",
             log_dir="/tmp/logs",
             log_level="debug",
@@ -745,7 +744,6 @@ class TestStartupFlow:
                         selector=router_args.selector,
                         service_discovery_port=router_args.service_discovery_port,
                         service_discovery_namespace=router_args.service_discovery_namespace,
-                        intra_node_data_parallel_size=router_args.intra_node_data_parallel_size,
                         api_key=router_args.api_key,
                         log_dir=router_args.log_dir,
                         log_level=router_args.log_level,
@@ -793,7 +791,6 @@ class TestStartupFlow:
             assert captured_args["selector"] == {"app": "worker"}
             assert captured_args["service_discovery_port"] == 8080
             assert captured_args["service_discovery_namespace"] == "default"
-            assert captured_args["intra_node_data_parallel_size"] == 2
             assert captured_args["api_key"] == "test-key"
             assert captured_args["log_dir"] == "/tmp/logs"
             assert captured_args["log_level"] == "debug"

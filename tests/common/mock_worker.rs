@@ -896,7 +896,7 @@ impl Default for MockWorkerConfig {
     }
 }
 
-// --- Request header capture for verifying router behavior (e.g., X-data-parallel-rank) ---
+// --- Request header capture ---
 
 /// A captured request with headers and path
 #[derive(Debug, Clone)]

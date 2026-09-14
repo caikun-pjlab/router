@@ -154,7 +154,6 @@ class TestRouterArgs:
             router_eviction_interval=180,
             router_max_tree_size=2**28,
             router_max_payload_size=1024 * 1024 * 1024,  # 1GB
-            router_intra_node_data_parallel_size=2,
             router_api_key="test-key",
             router_log_dir="/tmp/logs",
             router_log_level="debug",
@@ -212,7 +211,6 @@ class TestRouterArgs:
         assert router_args.decode_selector == {"app": "decode"}
 
         # Test other configurations
-        assert router_args.intra_node_data_parallel_size == 2
         assert router_args.api_key == "test-key"
         assert router_args.log_dir == "/tmp/logs"
         assert router_args.log_level == "debug"
@@ -278,7 +276,6 @@ class TestRouterArgs:
             router_eviction_interval=120,
             router_max_tree_size=2**26,
             router_max_payload_size=512 * 1024 * 1024,
-            router_intra_node_data_parallel_size=1,
             router_api_key=None,
             router_log_dir=None,
             router_log_level=None,
@@ -347,7 +344,6 @@ class TestRouterArgs:
             eviction_interval=120,
             max_tree_size=2**26,
             max_payload_size=512 * 1024 * 1024,
-            intra_node_data_parallel_size=1,
             api_key=None,
             log_dir=None,
             log_level=None,

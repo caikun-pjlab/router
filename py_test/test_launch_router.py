@@ -56,7 +56,6 @@ class TestLaunchRouter(unittest.TestCase):
             selector=None,
             service_discovery_port=80,
             service_discovery_namespace=None,
-            intra_node_data_parallel_size=1,
             prometheus_port=None,
             prometheus_host=None,
             request_timeout_secs=60,
@@ -121,20 +120,6 @@ class TestLaunchRouter(unittest.TestCase):
             service_discovery=True,
             selector=["app=test-worker"],
             service_discovery_namespace="test-namespace",
-        )
-        self.run_router_process(args)
-
-    def test_launch_router_common_with_dp_aware(self):
-        args = self.create_router_args(
-            worker_urls=["http://localhost:8000"],
-            intra_node_data_parallel_size=2,
-        )
-        self.run_router_process(args)
-
-    def test_launch_router_with_empty_worker_urls_with_dp_aware(self):
-        args = self.create_router_args(
-            worker_urls=[],
-            intra_node_data_parallel_size=2,
         )
         self.run_router_process(args)
 

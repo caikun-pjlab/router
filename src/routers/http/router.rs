@@ -1,7 +1,7 @@
 use crate::config::types::RetryConfig;
 use crate::core::{
-    is_retryable_status, BasicWorker, CircuitBreakerConfig, DPAwareWorker, HealthConfig,
-    RetryExecutor, Worker, WorkerRegistry, WorkerType,
+    is_retryable_status, BasicWorker, CircuitBreakerConfig, HealthConfig, RetryExecutor, Worker,
+    WorkerRegistry, WorkerType,
 };
 use crate::metrics::RouterMetrics;
 use crate::otel_http::{self, ClientRequestOptions};
@@ -11,7 +11,6 @@ use crate::protocols::spec::{
     InferenceGenerateRequest, RerankRequest, RerankResponse, RerankResult, ResponsesRequest,
 };
 use crate::routers::header_utils;
-use crate::routers::http::dp_utils;
 use crate::routers::{RouterTrait, WorkerManagement};
 use axum::body::to_bytes;
 use axum::{
@@ -39,7 +38,6 @@ pub struct Router {
     client: Client,
     worker_startup_timeout_secs: u64,
     worker_startup_check_interval_secs: u64,
-    intra_node_data_parallel_size: usize,
     api_key: Option<String>,
     retry_config: RetryConfig,
     circuit_breaker_config: CircuitBreakerConfig,
@@ -67,20 +65,6 @@ impl Router {
             .await?;
         }
 
-        // Automatically expand to DP-aware workers when intra_node_data_parallel_size > 1
-        let worker_urls = if ctx.router_config.intra_node_data_parallel_size > 1 {
-            // worker address now in the format of "http://host:port@dp_rank"
-            dp_utils::get_dp_aware_workers(
-                &worker_urls,
-                &ctx.router_config.api_key,
-                ctx.router_config.intra_node_data_parallel_size,
-            )
-            .await
-            .map_err(|e| format!("Failed to get dp-aware workers: {}", e))?
-        } else {
-            worker_urls
-        };
-
         // Convert config CircuitBreakerConfig to core CircuitBreakerConfig
         let circuit_breaker_config = ctx.router_config.effective_circuit_breaker_config();
         let core_cb_config = CircuitBreakerConfig {
@@ -92,7 +76,6 @@ impl Router {
 
         // Register workers in the registry
         // In IGW mode, we need to fetch model info from workers
-        let dp_size = ctx.router_config.intra_node_data_parallel_size;
         let health_config = HealthConfig {
             timeout_secs: ctx.router_config.health_check.timeout_secs,
             check_interval_secs: ctx.router_config.health_check.check_interval_secs,
@@ -103,25 +86,11 @@ impl Router {
         for url in &worker_urls {
             // TODO: In IGW mode, fetch model_id from worker's /get_model_info endpoint
             // For now, create worker without model_id
-            let worker_arc: Arc<dyn Worker> = if dp_size > 1 {
-                let (base_url, dp_rank) = dp_utils::parse_worker_url(url);
-                Arc::new(
-                    DPAwareWorker::new(
-                        base_url,
-                        dp_rank.unwrap_or(0),
-                        dp_size,
-                        WorkerType::Regular,
-                    )
+            let worker_arc: Arc<dyn Worker> = Arc::new(
+                BasicWorker::new(url.clone(), WorkerType::Regular)
                     .with_circuit_breaker_config(core_cb_config.clone())
                     .with_health_config(health_config.clone()),
-                )
-            } else {
-                Arc::new(
-                    BasicWorker::new(url.clone(), WorkerType::Regular)
-                        .with_circuit_breaker_config(core_cb_config.clone())
-                        .with_health_config(health_config.clone()),
-                )
-            };
+            );
             ctx.worker_registry.register(worker_arc.clone());
 
             // Notify PolicyRegistry about the new worker
@@ -175,7 +144,6 @@ impl Router {
             worker_startup_check_interval_secs: ctx
                 .router_config
                 .worker_startup_check_interval_secs,
-            intra_node_data_parallel_size: ctx.router_config.intra_node_data_parallel_size,
             api_key: ctx.router_config.api_key.clone(),
             retry_config: ctx.router_config.effective_retry_config(),
             circuit_breaker_config: core_cb_config,
@@ -223,35 +191,11 @@ impl Router {
         worker_startup_timeout_secs: u64,
         worker_startup_check_interval_secs: u64,
     ) -> Result<(), String> {
-        // Extract unique base URLs (hosts) for health checks
-        // This deduplicates DP-aware URLs like http://host:8081@0, @1, @2, @3
-        // to only check http://host:8081 once
-        use std::collections::HashSet;
-        let mut unique_hosts = HashSet::new();
-        let mut host_to_workers: std::collections::HashMap<String, Vec<String>> =
-            std::collections::HashMap::new();
-
-        for url in worker_urls {
-            // Extract base URL by removing @rank suffix if present
-            let base_url = if let Some(at_pos) = url.rfind('@') {
-                url[..at_pos].to_string()
-            } else {
-                url.clone()
-            };
-
-            unique_hosts.insert(base_url.clone());
-            host_to_workers
-                .entry(base_url)
-                .or_default()
-                .push(url.clone());
-        }
-
-        let unique_hosts_vec: Vec<String> = unique_hosts.into_iter().collect();
+        let unique_hosts_vec: Vec<String> = worker_urls.to_vec();
 
         info!(
-            "Waiting for {} unique hosts (representing {} workers) to become healthy (timeout: {}s)",
+            "Waiting for {} workers to become healthy (timeout: {}s)",
             unique_hosts_vec.len(),
-            worker_urls.len(),
             worker_startup_timeout_secs
         );
 
@@ -273,11 +217,10 @@ impl Router {
                 ));
             }
 
-            // Perform health checks only on unique hosts (not per DP rank)
             let mut health_checks = Vec::new();
-            for base_url in &unique_hosts_vec {
+            for worker_url in &unique_hosts_vec {
                 let client_clone = client.clone();
-                let url_clone = base_url.clone();
+                let url_clone = worker_url.clone();
 
                 let check_health = tokio::spawn(async move {
                     let health_url = format!("{}/health", url_clone);
@@ -319,15 +262,14 @@ impl Router {
 
             if healthy_host_count > 0 {
                 info!(
-                    "{} out of {} unique hosts are healthy (representing {} workers)",
+                    "{} out of {} workers are healthy",
                     healthy_host_count,
-                    unique_hosts_vec.len(),
-                    worker_urls.len()
+                    unique_hosts_vec.len()
                 );
                 return Ok(());
             } else {
                 debug!(
-                   "Waiting for at least 1 of {} unique hosts to become healthy ({} unhealthy: {:?})",
+                    "Waiting for at least 1 of {} workers to become healthy ({} unhealthy: {:?})",
                     unique_hosts_vec.len(),
                     unhealthy_hosts.len(),
                     unhealthy_hosts
@@ -363,24 +305,7 @@ impl Router {
     }
 
     pub async fn send_health_check(&self, worker_url: &str) -> Response {
-        let health_url = if self.intra_node_data_parallel_size > 1 {
-            // Need to extract the URL from "http://host:port@dp_rank"
-            match dp_utils::extract_dp_rank(worker_url) {
-                Ok((worker_url_prefix, _dp_rank)) => worker_url_prefix,
-                Err(e) => {
-                    error!("Failed to extract dp_rank for health check: {}", e);
-                    return (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to extract dp_rank: {}", e),
-                    )
-                        .into_response();
-                }
-            }
-        } else {
-            worker_url
-        };
-
-        let request_builder = self.client.get(format!("{}/health", health_url));
+        let request_builder = self.client.get(format!("{}/health", worker_url));
 
         let response = match request_builder.send().await {
             Ok(res) => {
@@ -391,7 +316,7 @@ impl Router {
                     Ok(body) => (status, body).into_response(),
                     Err(e) => {
                         error!(
-                            worker_url = %health_url,
+                            worker_url = %worker_url,
                             error = %e,
                             "Failed to read health response body"
                         );
@@ -405,13 +330,13 @@ impl Router {
             }
             Err(e) => {
                 error!(
-                    worker_url = %health_url,
+                    worker_url = %worker_url,
                     error = %e,
                     "Failed to send health request to worker"
                 );
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to send request to worker {}: {}", health_url, e),
+                    format!("Failed to send request to worker {}: {}", worker_url, e),
                 )
                     .into_response()
             }
@@ -639,16 +564,6 @@ impl Router {
         response
     }
 
-    // Helper: return base worker URL (strips DP suffix when enabled)
-    fn worker_base_url(&self, worker_url: &str) -> String {
-        if self.intra_node_data_parallel_size > 1 {
-            if let Ok((prefix, _)) = dp_utils::extract_dp_rank(worker_url) {
-                return prefix.to_string();
-            }
-        }
-        worker_url.to_string()
-    }
-
     // Generic simple routing for GET/POST without JSON body
     async fn route_simple_request(
         &self,
@@ -665,9 +580,8 @@ impl Router {
 
         let mut last_response: Option<Response> = None;
         for worker_url in worker_urls {
-            let base = self.worker_base_url(&worker_url);
+            let url = format!("{}/{}", worker_url, endpoint);
 
-            let url = format!("{}/{}", base, endpoint);
             let route_name = format!("/{}", endpoint);
             let method_name = method.as_str().to_string();
             let mut request_builder = match method.clone() {
@@ -773,48 +687,8 @@ impl Router {
         is_stream: bool,
         load_incremented: bool, // Whether load was incremented for this request
     ) -> Response {
-        let (mut request_builder, extracted_dp_rank, request_url) =
-            if self.intra_node_data_parallel_size > 1 {
-                let (worker_url_prefix, dp_rank) = match dp_utils::extract_dp_rank(worker_url) {
-                    Ok(tup) => tup,
-                    Err(e) => {
-                        error!("Failed to extract dp_rank: {}", e);
-                        return (
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            format!("Failed to extract dp_rank: {}", e),
-                        )
-                            .into_response();
-                    }
-                };
-
-                // Parse the request body
-                let json_val = match serde_json::to_value(typed_req) {
-                    Ok(j) => j,
-                    Err(e) => {
-                        return (
-                            StatusCode::BAD_REQUEST,
-                            format!("Convert into serde_json::Value failed: {}", e),
-                        )
-                            .into_response();
-                    }
-                };
-
-                // Use the original json_val without modification
-
-                let request_url = format!("{}{}", worker_url_prefix, route);
-                (
-                    self.client.post(&request_url).json(&json_val),
-                    Some(dp_rank),
-                    request_url,
-                )
-            } else {
-                let request_url = format!("{}{}", worker_url, route);
-                (
-                    self.client.post(&request_url).json(typed_req),
-                    None,
-                    request_url,
-                )
-            };
+        let request_url = format!("{}{}", worker_url, route);
+        let mut request_builder = self.client.post(&request_url).json(typed_req);
 
         // Copy all headers from original request if provided, skipping
         // Content-Type/Content-Length (.json() sets them) and trace headers
@@ -830,11 +704,6 @@ impl Router {
                     request_builder = request_builder.header(name, value);
                 }
             }
-        }
-
-        // Add X-data-parallel-rank header for DP-aware routing
-        if let Some(dp_rank) = extracted_dp_rank {
-            request_builder = request_builder.header("X-data-parallel-rank", dp_rank.to_string());
         }
 
         let res = match otel_http::send_client_request(
@@ -1072,149 +941,66 @@ impl Router {
     /// startup timeout expires. The central health checker takes over after the
     /// worker has been registered.
     pub fn register_worker_unchecked(&self, worker_url: &str) -> Result<String, String> {
-        let worker_urls = if self.intra_node_data_parallel_size > 1 {
-            (0..self.intra_node_data_parallel_size)
-                .map(|rank| format!("{}@{}", worker_url, rank))
-                .collect()
-        } else {
-            vec![worker_url.to_string()]
-        };
-
-        if worker_urls
-            .iter()
-            .any(|url| self.worker_registry.get_by_url(url).is_some())
-        {
+        if self.worker_registry.get_by_url(worker_url).is_some() {
             return Err(format!("Worker {} already exists", worker_url));
         }
 
-        for url in worker_urls {
-            let worker_arc: Arc<dyn Worker> = if self.intra_node_data_parallel_size > 1 {
-                let (base_url, dp_rank) = dp_utils::parse_worker_url(&url);
-                Arc::new(
-                    DPAwareWorker::new(
-                        base_url,
-                        dp_rank.unwrap_or(0),
-                        self.intra_node_data_parallel_size,
-                        WorkerType::Regular,
-                    )
-                    .with_circuit_breaker_config(self.circuit_breaker_config.clone()),
-                )
-            } else {
-                Arc::new(
-                    BasicWorker::new(url.clone(), WorkerType::Regular)
-                        .with_circuit_breaker_config(self.circuit_breaker_config.clone()),
-                )
-            };
-
-            self.worker_registry.register(worker_arc.clone());
-            let model_id = worker_arc.model_id();
-            let policy = self.policy_registry.on_worker_added(model_id, None);
-            if policy.name() == "cache_aware" {
-                if let Some(cache_aware) = policy
-                    .as_any()
-                    .downcast_ref::<crate::policies::CacheAwarePolicy>()
-                {
-                    let model_workers = self.worker_registry.get_by_model_fast(model_id);
-                    cache_aware.init_workers(&model_workers);
-                }
+        let worker_arc: Arc<dyn Worker> = Arc::new(
+            BasicWorker::new(worker_url.to_string(), WorkerType::Regular)
+                .with_circuit_breaker_config(self.circuit_breaker_config.clone()),
+        );
+        self.worker_registry.register(worker_arc.clone());
+        let model_id = worker_arc.model_id();
+        let policy = self.policy_registry.on_worker_added(model_id, None);
+        if policy.name() == "cache_aware" {
+            if let Some(cache_aware) = policy
+                .as_any()
+                .downcast_ref::<crate::policies::CacheAwarePolicy>()
+            {
+                let model_workers = self.worker_registry.get_by_model_fast(model_id);
+                cache_aware.init_workers(&model_workers);
             }
-            info!("Registered worker without startup health check: {}", url);
         }
+        info!(
+            "Registered worker without startup health check: {}",
+            worker_url
+        );
 
         RouterMetrics::set_active_workers(self.worker_registry.get_all().len());
         Ok(format!("Successfully added worker: {}", worker_url))
     }
 
     pub fn remove_worker(&self, worker_url: &str) {
-        if self.intra_node_data_parallel_size > 1 {
-            // remove dp-aware workers in a prefix-matching fashion
-            // without contacting the remote worker
-            let mut removed_workers: Vec<String> = Vec::new();
-            let worker_url_prefix = format!("{}@", worker_url);
+        // Get the worker first to extract model_id
+        let model_id = if let Some(worker) = self.worker_registry.get_by_url(worker_url) {
+            worker.model_id().to_string()
+        } else {
+            warn!("Worker {} not found, skipping removal", worker_url);
+            return;
+        };
 
-            // Find and remove all workers with matching prefix
-            let all_workers = self.worker_registry.get_all();
-            for w in all_workers.iter() {
-                if w.url().starts_with(&worker_url_prefix) {
-                    // Get model_id before removing
-                    let model_id = w.model_id().to_string();
+        if self.worker_registry.remove_by_url(worker_url).is_some() {
+            info!("Removed worker: {}", worker_url);
 
-                    if self.worker_registry.remove_by_url(w.url()).is_some() {
-                        info!("Removed worker: {}", w.url());
-                        removed_workers.push(w.url().to_string());
-
-                        // Notify PolicyRegistry about the removed worker
-                        self.policy_registry.on_worker_removed(&model_id);
-                    } else {
-                        warn!("Worker {} not found, skipping removal", w.url());
-                    }
-                }
-            }
+            // Notify PolicyRegistry about the removed worker
+            self.policy_registry.on_worker_removed(&model_id);
 
             RouterMetrics::set_active_workers(self.worker_registry.get_all().len());
+        }
 
-            // If any models are using cache aware policy, remove the workers from the tree
-            // Check each removed worker's model and get its policy
-            for dp_url in removed_workers.iter() {
-                if let Some(worker) = self.worker_registry.get_by_url(dp_url) {
-                    let model_id = worker.model_id();
-                    if let Some(policy) = self.policy_registry.get_policy(model_id) {
-                        if let Some(cache_aware) = policy
-                            .as_any()
-                            .downcast_ref::<crate::policies::CacheAwarePolicy>()
-                        {
-                            cache_aware.remove_worker_by_url(dp_url);
-                            info!("Removed worker from cache-aware tree: {}", dp_url);
-                        }
-                    }
-                }
-            }
-        } else {
-            // Get the worker first to extract model_id
-            let model_id = if let Some(worker) = self.worker_registry.get_by_url(worker_url) {
-                worker.model_id().to_string()
-            } else {
-                warn!("Worker {} not found, skipping removal", worker_url);
-                return;
-            };
-
-            if self.worker_registry.remove_by_url(worker_url).is_some() {
-                info!("Removed worker: {}", worker_url);
-
-                // Notify PolicyRegistry about the removed worker
-                self.policy_registry.on_worker_removed(&model_id);
-
-                RouterMetrics::set_active_workers(self.worker_registry.get_all().len());
-            }
-
-            // If the model is using cache aware policy, remove the worker from the tree
-            if let Some(policy) = self.policy_registry.get_policy(&model_id) {
-                if let Some(cache_aware) = policy
-                    .as_any()
-                    .downcast_ref::<crate::policies::CacheAwarePolicy>()
-                {
-                    cache_aware.remove_worker_by_url(worker_url);
-                    info!("Removed worker from cache-aware tree: {}", worker_url);
-                }
+        // If the model is using cache aware policy, remove the worker from the tree
+        if let Some(policy) = self.policy_registry.get_policy(&model_id) {
+            if let Some(cache_aware) = policy
+                .as_any()
+                .downcast_ref::<crate::policies::CacheAwarePolicy>()
+            {
+                cache_aware.remove_worker_by_url(worker_url);
+                info!("Removed worker from cache-aware tree: {}", worker_url);
             }
         }
     }
 
     async fn get_worker_load(&self, worker_url: &str) -> Option<isize> {
-        let worker_url = if self.intra_node_data_parallel_size > 1 {
-            // Need to extract the URL from "http://host:port@dp_rank"
-            let (worker_url_prefix, _dp_rank) = match dp_utils::extract_dp_rank(worker_url) {
-                Ok(tup) => tup,
-                Err(e) => {
-                    error!("Failed to extract dp_rank: {}", e);
-                    return None;
-                }
-            };
-            worker_url_prefix
-        } else {
-            worker_url
-        };
-
         match self
             .client
             .get(format!("{}/get_load", worker_url))
@@ -1286,20 +1072,6 @@ impl Router {
 
     // Static version of get_worker_load for use in monitoring task
     async fn get_worker_load_static(client: &reqwest::Client, worker_url: &str) -> Option<isize> {
-        let worker_url = if worker_url.contains("@") {
-            // Need to extract the URL from "http://host:port@dp_rank"
-            let (worker_url_prefix, _dp_rank) = match dp_utils::extract_dp_rank(worker_url) {
-                Ok(tup) => tup,
-                Err(e) => {
-                    debug!("Failed to extract dp_rank: {}", e);
-                    return None;
-                }
-            };
-            worker_url_prefix
-        } else {
-            worker_url
-        };
-
         match client.get(format!("{}/get_load", worker_url)).send().await {
             Ok(res) if res.status().is_success() => match res.bytes().await {
                 Ok(bytes) => match serde_json::from_slice::<serde_json::Value>(&bytes) {
@@ -1530,23 +1302,6 @@ impl RouterTrait for Router {
         // Send requests to all workers concurrently without headers
         let mut tasks = Vec::new();
         for worker_url in &worker_urls {
-            let worker_url = if self.intra_node_data_parallel_size > 1 {
-                // Need to extract the URL from "http://host:port@dp_rank"
-                let (worker_url_prefix, _dp_rank) = match dp_utils::extract_dp_rank(worker_url) {
-                    Ok(tup) => tup,
-                    Err(e) => {
-                        error!("Failed to extract dp_rank: {}", e);
-                        return (
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            format!("Failed to extract dp_rank: {}", e),
-                        )
-                            .into_response();
-                    }
-                };
-                worker_url_prefix
-            } else {
-                worker_url
-            };
             let request_builder = self.client.post(format!("{}/flush_cache", worker_url));
             tasks.push(request_builder.send());
         }
@@ -1687,9 +1442,6 @@ impl RouterTrait for Router {
             }
         };
 
-        // Add X-data-parallel-rank header for DP-aware routing
-        request_builder = dp_utils::add_dp_rank_header(request_builder, worker.dp_rank());
-
         // Add JSON body if not null/empty
         if !body.is_null() {
             request_builder = request_builder.json(&body);
@@ -1794,7 +1546,6 @@ mod tests {
             policy_registry,
             worker_startup_timeout_secs: 5,
             worker_startup_check_interval_secs: 1,
-            intra_node_data_parallel_size: 1,
             api_key: None,
             client: Client::new(),
             retry_config: RetryConfig::default(),
@@ -1866,7 +1617,6 @@ mod tests {
             policy_registry,
             worker_startup_timeout_secs: 5,
             worker_startup_check_interval_secs: 1,
-            intra_node_data_parallel_size: 1,
             api_key: None,
             client: Client::new(),
             retry_config: RetryConfig::default(),
@@ -2109,19 +1859,6 @@ mod tests {
         });
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         (format!("http://{}", addr), handle)
-    }
-
-    #[tokio::test]
-    async fn test_wait_for_healthy_workers_dp_aware_dedup() {
-        // DP-aware URLs like http://host:port@0, @1, @2 should be deduplicated
-        // to a single /health check on http://host:port.
-        let (base_url, _handle) = start_healthy_mock_server().await;
-        let dp_urls: Vec<String> = (0..4)
-            .map(|rank| format!("{}@{}", base_url, rank))
-            .collect();
-
-        let result = Router::wait_for_healthy_workers(&dp_urls, 5, 1).await;
-        assert!(result.is_ok());
     }
 
     #[tokio::test]

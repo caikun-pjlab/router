@@ -157,10 +157,6 @@ struct CliArgs {
     #[arg(long, default_value_t = 536870912)] // 512MB
     max_payload_size: usize,
 
-    /// Intra-node data parallel size (number of DP replicas per worker URL). When > 1, the router will create multiple worker instances per URL, one for each DP rank.
-    #[arg(long, default_value_t = 1)]
-    intra_node_data_parallel_size: usize,
-
     /// API key for worker authorization
     #[arg(long)]
     api_key: Option<String>,
@@ -503,7 +499,6 @@ impl CliArgs {
             request_timeout_secs: self.request_timeout_secs,
             worker_startup_timeout_secs: self.worker_startup_timeout_secs,
             worker_startup_check_interval_secs: self.worker_startup_check_interval,
-            intra_node_data_parallel_size: self.intra_node_data_parallel_size,
             api_key: self.api_key.clone(),
             api_key_validation_urls,
             discovery,

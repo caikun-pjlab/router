@@ -257,11 +257,9 @@ class TestRouterConfigValidation:
         """Test tokenizer configuration validation."""
         pytest.skip("Tokenizer configuration not available in current implementation")
 
-    def test_dp_aware_config_validation(self):
-        """Test data parallelism aware configuration validation."""
-        # Valid DP-aware routing config (enabled when intra_node_data_parallel_size > 1)
-        args = RouterArgs(intra_node_data_parallel_size=2, api_key="test-api-key")
-        assert args.intra_node_data_parallel_size == 2
+    def test_api_key_config_validation(self):
+        """Test API key configuration remains independent of routing mode."""
+        args = RouterArgs(api_key="test-api-key")
         assert args.api_key == "test-api-key"
 
     def test_request_id_headers_validation(self):

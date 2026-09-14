@@ -127,7 +127,6 @@ def _popen_launch_router_only(
     policy: str = "round_robin",
     timeout: float = 120.0,
     *,
-    intra_node_data_parallel_size: int = 1,
     enable_igw: bool = False,
     api_key: str | None = None,
 ) -> subprocess.Popen:
@@ -145,8 +144,6 @@ def _popen_launch_router_only(
         "--policy",
         policy,
     ]
-    if intra_node_data_parallel_size > 1:
-        cmd += ["--intra-node-data-parallel-size", str(intra_node_data_parallel_size)]
     if enable_igw:
         cmd += ["--enable-igw"]
     if api_key is not None:
@@ -744,38 +741,6 @@ def e2e_primary_worker(e2e_model: str):
     base_url = f"http://127.0.0.1:{port}"
     proc = _popen_launch_worker(e2e_model, base_url)
     # Router health gate will handle worker readiness
-    try:
-        yield SimpleNamespace(proc=proc, url=base_url)
-    finally:
-        _terminate(proc)
-
-
-@pytest.fixture
-def e2e_router_only_rr_dp_aware_api():
-    """Router-only with data parallel routing enabled (intra_node_data_parallel_size=2) and an API key."""
-    port = _find_available_port()
-    base_url = f"http://127.0.0.1:{port}"
-    api_key = "secret"
-    proc = _popen_launch_router_only(
-        base_url,
-        policy="round_robin",
-        timeout=180.0,
-        intra_node_data_parallel_size=2,
-        api_key=api_key,
-    )
-    try:
-        yield SimpleNamespace(proc=proc, url=base_url, api_key=api_key)
-    finally:
-        _terminate(proc)
-
-
-@pytest.fixture
-def e2e_worker_dp2_api(e2e_model: str, e2e_router_only_rr_dp_aware_api):
-    """Worker with dp-size=2 and the same API key as the dp-aware router."""
-    port = _find_available_port()
-    base_url = f"http://127.0.0.1:{port}"
-    api_key = e2e_router_only_rr_dp_aware_api.api_key
-    proc = _popen_launch_worker(e2e_model, base_url, dp_size=2, api_key=api_key)
     try:
         yield SimpleNamespace(proc=proc, url=base_url)
     finally:

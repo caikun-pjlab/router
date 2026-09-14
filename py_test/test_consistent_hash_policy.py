@@ -291,28 +291,6 @@ class ConsistentHashTester:
             self.log(f"❌ Priority routing test failed: {e}", "ERROR")
             return False
 
-    def test_dp_aware_routing(self) -> bool:
-        """
-        Test DP-aware routing with consistent hashing (if DP is enabled).
-        """
-        self.log("Testing DP-aware routing with consistent hashing...")
-
-        # Create requests for multiple sessions to test DP routing
-        sessions = [self.generate_session_id() for _ in range(10)]
-
-        for i, session_id in enumerate(sessions):
-            prompt = f"DP-aware test for session {session_id}"
-            success, response = self.make_request(prompt, session_id=session_id)
-
-            if success:
-                self.log(f"  DP session {i+1}: ✅")
-            else:
-                self.log(f"  DP session {i+1}: ❌ {response}", "ERROR")
-                return False
-
-        self.log("✅ DP-aware routing test passed")
-        return True
-
     def test_concurrent_requests(self, num_concurrent: int = 10) -> bool:
         """
         Test concurrent requests with the same session_id to verify thread safety.
@@ -428,7 +406,6 @@ class ConsistentHashTester:
             ("Priority Routing", self.test_priority_routing),
             ("Distribution", lambda: self.test_distribution_across_workers(20)),
             ("Fallback Behavior", self.test_fallback_without_session_or_user),
-            ("DP-Aware Routing", self.test_dp_aware_routing),
             ("Concurrent Requests", lambda: self.test_concurrent_requests(10)),
             ("Request Formats", self.test_different_request_formats),
         ]
@@ -512,7 +489,6 @@ def main():
             "priority": tester.test_session_priority_over_user,
             "distribution": lambda: tester.test_distribution_across_workers(20),
             "fallback": tester.test_fallback_without_session_or_user,
-            "dp_routing": tester.test_dp_aware_routing,
             "concurrent": lambda: tester.test_concurrent_requests(10),
             "formats": tester.test_different_request_formats,
         }

@@ -158,11 +158,12 @@ pytest py_test/unit/test_arg_parser.py \
   py_test/unit/test_router_config.py \
   py_test/unit/test_startup_sequence.py \
   py_test/test_launch_router.py
-rg -n 'intra.node.data.parallel|DPAwareWorker|dp_utils|X-data-parallel-rank|dp_rank|dp_size' src py_src tests py_test
+rg -n 'intra.node.data.parallel|DPAwareWorker|dp_utils|X-data-parallel-rank|dp_rank|extract_dp_info|create_dp_aware' src py_src tests py_test
 ```
 
 **完成标准**
-- `tests/test_dp_routing.rs` 已删除，搜索无源码/测试引用（历史文档记录在任务 12 清理）。
+- `tests/test_dp_routing.rs` 已删除，上述搜索无路由器源码/测试引用（历史文档记录在任务 12 清理）。
+- `dp_size` 仅允许作为 LMDeploy 引擎协议元数据或测试装置自身的引擎参数保留，不再出现在 Rust 路由 DP-aware 实现中。
 
 ### 任务 6：精简 LMDeploy PD 基类和 bootstrap-port 语义
 

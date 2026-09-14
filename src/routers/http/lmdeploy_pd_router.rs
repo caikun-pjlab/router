@@ -6,7 +6,6 @@
 // - Prefill response carries top-level id, cache_block_ids, remote_token_ids
 // - P2P RDMA connection established via /distserve/p2p_initialize + /distserve/p2p_connect
 // - Decode request carries migration_request field (not kv_transfer_params)
-use super::dp_utils;
 use super::pd_router::PdRouterBase;
 use super::pd_types::{error_chain, PDRouterError};
 use crate::config::{LMDeployMigrationProtocol, LMDeployRdmaConfig, LMDeployRdmaLinkType};
@@ -611,8 +610,7 @@ impl LMDeployPDRouter {
     ) -> Result<Response, PDRouterError> {
         let start_time = Instant::now();
         let request_id = format!("lmd-{}", Uuid::new_v4());
-        let decode_base_url = decode_worker.base_url().to_string();
-        let decode_dp_rank = decode_worker.dp_rank();
+        let decode_base_url = decode_worker.url().to_string();
         let decode_url = decode_worker.endpoint_url(path);
 
         debug!(
@@ -635,7 +633,7 @@ impl LMDeployPDRouter {
             let prefill_worker = prefill_worker.ok_or_else(|| PDRouterError::NetworkError {
                 message: "LMDeploy PD request has no prefill worker".to_string(),
             })?;
-            let prefill_base_url = prefill_worker.base_url().to_string();
+            let prefill_base_url = prefill_worker.url().to_string();
 
             // Establish the transport before preserving a prefill cache. This avoids
             // retaining KV blocks when the control-plane handshake itself fails.
@@ -656,12 +654,11 @@ impl LMDeployPDRouter {
 
             // Stage 1: Prefill
             let prefill_request = Self::prepare_prefill_request(original_request.clone(), path);
-            let prefill_dp_rank = prefill_worker.dp_rank();
             let prefill_url = prefill_worker.endpoint_url(path);
 
             debug!("LMD Stage 1 - Prefill: {}", prefill_url);
 
-            let mut prefill_request_builder = self
+            let prefill_request_builder = self
                 .pd_router
                 .client
                 .post(&prefill_url)
@@ -674,8 +671,6 @@ impl LMDeployPDRouter {
                     ),
                 )
                 .header("X-Request-Id", &request_id);
-            prefill_request_builder =
-                dp_utils::add_dp_rank_header(prefill_request_builder, prefill_dp_rank);
 
             let prefill_response = match otel_http::send_client_request(
                 prefill_request_builder.json(&prefill_request),
@@ -773,7 +768,7 @@ impl LMDeployPDRouter {
 
         debug!("LMD Stage 2 - Decode: {}", decode_url);
 
-        let mut decode_request_builder = self
+        let decode_request_builder = self
             .pd_router
             .client
             .post(&decode_url)
@@ -786,8 +781,6 @@ impl LMDeployPDRouter {
                 ),
             )
             .header("X-Request-Id", &request_id);
-        decode_request_builder =
-            dp_utils::add_dp_rank_header(decode_request_builder, decode_dp_rank);
 
         let decode_response = match otel_http::send_client_request(
             decode_request_builder.json(&decode_request),
