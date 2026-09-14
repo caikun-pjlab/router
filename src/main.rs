@@ -29,23 +29,17 @@ fn parse_prefill_args() -> Vec<String> {
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
 pub enum Backend {
-    #[value(name = "vllm")]
-    Vllm,
-    #[value(name = "trtllm")]
-    Trtllm,
+    #[value(name = "lmdeploy")]
+    LMDeploy,
     #[value(name = "openai")]
     Openai,
-    #[value(name = "anthropic")]
-    Anthropic,
 }
 
 impl std::fmt::Display for Backend {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
-            Backend::Vllm => "vllm",
-            Backend::Trtllm => "trtllm",
+            Backend::LMDeploy => "lmdeploy",
             Backend::Openai => "openai",
-            Backend::Anthropic => "anthropic",
         };
         write!(f, "{}", s)
     }
@@ -54,9 +48,9 @@ impl std::fmt::Display for Backend {
 #[derive(Parser, Debug)]
 #[command(name = "lmdeploy-router")]
 #[command(version)]
-#[command(about = "VLLM Router - High-performance request distribution across worker nodes")]
+#[command(about = "LMDeploy Router - High-performance request distribution across worker nodes")]
 #[command(long_about = r#"
-VLLM Router - High-performance request distribution across worker nodes
+LMDeploy Router - High-performance request distribution across worker nodes
 
 Usage:
 This launcher enables starting a router with individual worker instances. It is useful for
@@ -147,8 +141,8 @@ struct CliArgs {
     #[arg(long, num_args = 0..)]
     api_key_validation_urls: Vec<String>,
 
-    /// Backend to route requests to (vllm, trtllm, openai, anthropic)
-    #[arg(long, value_enum, default_value_t = Backend::Vllm, alias = "runtime")]
+    /// Backend to route requests to (lmdeploy, openai)
+    #[arg(long, value_enum, default_value_t = Backend::LMDeploy, alias = "runtime")]
     backend: Backend,
 
     /// Directory to store log files
@@ -612,7 +606,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli_args = CliArgs::parse_from(filtered_args);
     println!("DEBUG: CLI args parsed successfully");
     // Print startup info
-    println!("VLLM Router starting...");
+    println!("LMDeploy Router starting...");
     println!("Host: {}:{}", cli_args.host, cli_args.port);
     let mode_str = if cli_args.enable_igw {
         "IGW (Inference Gateway)".to_string()
@@ -624,18 +618,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         format!("Regular ({})", cli_args.backend)
     };
     println!("Mode: {}", mode_str);
-
-    // Warn for runtimes that are parsed but not yet implemented
-    match cli_args.backend {
-        Backend::Trtllm | Backend::Anthropic => {
-            println!(
-                "WARNING: runtime '{}' not implemented yet; falling back to regular routing. \
-Provide --worker-urls or PD flags as usual.",
-                cli_args.backend
-            );
-        }
-        Backend::Vllm | Backend::Openai => {}
-    }
 
     if !cli_args.enable_igw {
         println!("Policy: {}", cli_args.policy);
