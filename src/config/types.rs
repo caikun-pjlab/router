@@ -198,22 +198,6 @@ pub enum RoutingMode {
         /// OpenAI-compatible API base(s), provided via worker URLs
         worker_urls: Vec<String>,
     },
-    #[serde(rename = "vllm_prefill_decode")]
-    VllmPrefillDecode {
-        /// Prefill worker URLs with optional bootstrap ports
-        prefill_urls: Vec<(String, Option<u16>)>,
-        /// Decode worker URLs
-        decode_urls: Vec<String>,
-        /// Optional separate policy for prefill workers
-        #[serde(skip_serializing_if = "Option::is_none")]
-        prefill_policy: Option<PolicyConfig>,
-        /// Optional separate policy for decode workers
-        #[serde(skip_serializing_if = "Option::is_none")]
-        decode_policy: Option<PolicyConfig>,
-        /// ZMQ service discovery address (e.g., "0.0.0.0:30001")
-        #[serde(skip_serializing_if = "Option::is_none")]
-        discovery_address: Option<String>,
-    },
     #[serde(rename = "lmdeploy_prefill_decode")]
     LMDeployPrefillDecode {
         /// lmdeploy prefill worker URLs
@@ -240,14 +224,7 @@ pub enum RoutingMode {
 
 impl RoutingMode {
     pub fn is_pd_mode(&self) -> bool {
-        matches!(
-            self,
-            RoutingMode::VllmPrefillDecode { .. } | RoutingMode::LMDeployPrefillDecode { .. }
-        )
-    }
-
-    pub fn is_vllm_pd_mode(&self) -> bool {
-        matches!(self, RoutingMode::VllmPrefillDecode { .. })
+        matches!(self, RoutingMode::LMDeployPrefillDecode { .. })
     }
 
     /// Returns true if this is lmdeploy PD disaggregation mode
@@ -258,11 +235,6 @@ impl RoutingMode {
     pub fn worker_count(&self) -> usize {
         match self {
             RoutingMode::Regular { worker_urls } => worker_urls.len(),
-            RoutingMode::VllmPrefillDecode {
-                prefill_urls,
-                decode_urls,
-                ..
-            } => prefill_urls.len() + decode_urls.len(),
             RoutingMode::LMDeployPrefillDecode {
                 prefill_urls,
                 decode_urls,
@@ -277,9 +249,6 @@ impl RoutingMode {
     /// Falls back to the main policy if no specific prefill policy is set
     pub fn get_prefill_policy<'a>(&'a self, main_policy: &'a PolicyConfig) -> &'a PolicyConfig {
         match self {
-            RoutingMode::VllmPrefillDecode { prefill_policy, .. } => {
-                prefill_policy.as_ref().unwrap_or(main_policy)
-            }
             RoutingMode::LMDeployPrefillDecode { prefill_policy, .. } => {
                 prefill_policy.as_ref().unwrap_or(main_policy)
             }
@@ -291,9 +260,6 @@ impl RoutingMode {
     /// Falls back to the main policy if no specific decode policy is set
     pub fn get_decode_policy<'a>(&'a self, main_policy: &'a PolicyConfig) -> &'a PolicyConfig {
         match self {
-            RoutingMode::VllmPrefillDecode { decode_policy, .. } => {
-                decode_policy.as_ref().unwrap_or(main_policy)
-            }
             RoutingMode::LMDeployPrefillDecode { decode_policy, .. } => {
                 decode_policy.as_ref().unwrap_or(main_policy)
             }
@@ -596,7 +562,6 @@ impl RouterConfig {
     pub fn mode_type(&self) -> &'static str {
         match self.mode {
             RoutingMode::Regular { .. } => "regular",
-            RoutingMode::VllmPrefillDecode { .. } => "vllm_prefill_decode",
             RoutingMode::LMDeployPrefillDecode { .. } => "lmdeploy_prefill_decode",
             RoutingMode::OpenAI { .. } => "openai",
         }
@@ -722,12 +687,14 @@ mod tests {
         };
         assert!(!regular.is_pd_mode());
 
-        let pd = RoutingMode::VllmPrefillDecode {
-            prefill_urls: vec![("http://prefill1".to_string(), Some(8001))],
+        let pd = RoutingMode::LMDeployPrefillDecode {
+            prefill_urls: vec!["http://prefill1".to_string()],
             decode_urls: vec!["http://decode1".to_string()],
             prefill_policy: None,
             decode_policy: None,
-            discovery_address: None,
+            migration_protocol: LMDeployMigrationProtocol::default(),
+            rdma_config: None,
+            dummy_prefill: false,
         };
         assert!(pd.is_pd_mode());
     }
@@ -743,11 +710,8 @@ mod tests {
         };
         assert_eq!(regular.worker_count(), 3);
 
-        let pd = RoutingMode::VllmPrefillDecode {
-            prefill_urls: vec![
-                ("http://prefill1".to_string(), Some(8001)),
-                ("http://prefill2".to_string(), None),
-            ],
+        let pd = RoutingMode::LMDeployPrefillDecode {
+            prefill_urls: vec!["http://prefill1".to_string(), "http://prefill2".to_string()],
             decode_urls: vec![
                 "http://decode1".to_string(),
                 "http://decode2".to_string(),
@@ -755,7 +719,9 @@ mod tests {
             ],
             prefill_policy: None,
             decode_policy: None,
-            discovery_address: None,
+            migration_protocol: LMDeployMigrationProtocol::default(),
+            rdma_config: None,
+            dummy_prefill: false,
         };
         assert_eq!(pd.worker_count(), 5);
 
@@ -775,16 +741,18 @@ mod tests {
         assert!(json.contains("\"type\":\"regular\""));
         assert!(json.contains("\"worker_urls\""));
 
-        // Test VllmPrefillDecode mode
-        let pd = RoutingMode::VllmPrefillDecode {
-            prefill_urls: vec![("http://prefill1".to_string(), Some(8001))],
+        // Test LMDeployPrefillDecode mode
+        let pd = RoutingMode::LMDeployPrefillDecode {
+            prefill_urls: vec!["http://prefill1".to_string()],
             decode_urls: vec!["http://decode1".to_string()],
             prefill_policy: None,
             decode_policy: None,
-            discovery_address: None,
+            migration_protocol: LMDeployMigrationProtocol::default(),
+            rdma_config: None,
+            dummy_prefill: false,
         };
         let json = serde_json::to_string(&pd).unwrap();
-        assert!(json.contains("\"type\":\"vllm_prefill_decode\""));
+        assert!(json.contains("\"type\":\"lmdeploy_prefill_decode\""));
         assert!(json.contains("\"prefill_urls\""));
         assert!(json.contains("\"decode_urls\""));
     }
@@ -812,7 +780,6 @@ mod tests {
         let deserialized: RoutingMode = serde_json::from_str(&json).unwrap();
         assert!(deserialized.is_pd_mode());
         assert!(deserialized.is_lmdeploy_pd_mode());
-        assert!(!deserialized.is_vllm_pd_mode());
         assert_eq!(deserialized.worker_count(), 2);
 
         // Test with rdma config and dummy_prefill=true
@@ -960,7 +927,6 @@ mod tests {
         let mode: RoutingMode = serde_json::from_str(json_str).unwrap();
         assert!(mode.is_lmdeploy_pd_mode());
         assert!(mode.is_pd_mode());
-        assert!(!mode.is_vllm_pd_mode());
         assert_eq!(mode.worker_count(), 2);
     }
 
@@ -1166,16 +1132,18 @@ mod tests {
         assert_eq!(config.mode_type(), "regular");
 
         let config = RouterConfig {
-            mode: RoutingMode::VllmPrefillDecode {
+            mode: RoutingMode::LMDeployPrefillDecode {
                 prefill_urls: vec![],
                 decode_urls: vec![],
                 prefill_policy: None,
                 decode_policy: None,
-                discovery_address: None,
+                migration_protocol: LMDeployMigrationProtocol::default(),
+                rdma_config: None,
+                dummy_prefill: false,
             },
             ..Default::default()
         };
-        assert_eq!(config.mode_type(), "vllm_prefill_decode");
+        assert_eq!(config.mode_type(), "lmdeploy_prefill_decode");
     }
 
     #[test]
@@ -1286,10 +1254,10 @@ mod tests {
     #[test]
     fn test_full_pd_mode_config() {
         let config = RouterConfig {
-            mode: RoutingMode::VllmPrefillDecode {
+            mode: RoutingMode::LMDeployPrefillDecode {
                 prefill_urls: vec![
-                    ("http://prefill1:8000".to_string(), Some(8001)),
-                    ("http://prefill2:8000".to_string(), None),
+                    "http://prefill1:8000".to_string(),
+                    "http://prefill2:8000".to_string(),
                 ],
                 decode_urls: vec![
                     "http://decode1:8000".to_string(),
@@ -1297,7 +1265,9 @@ mod tests {
                 ],
                 prefill_policy: None,
                 decode_policy: None,
-                discovery_address: None,
+                migration_protocol: LMDeployMigrationProtocol::default(),
+                rdma_config: None,
+                dummy_prefill: false,
             },
             policy: PolicyConfig::PowerOfTwo {
                 load_check_interval_secs: 30,
@@ -1490,8 +1460,8 @@ mod tests {
     #[test]
     fn test_pd_policy_fallback_both_specified() {
         // When both prefill and decode policies are specified, they should be used
-        let pd = RoutingMode::VllmPrefillDecode {
-            prefill_urls: vec![("http://prefill1".to_string(), None)],
+        let pd = RoutingMode::LMDeployPrefillDecode {
+            prefill_urls: vec!["http://prefill1".to_string()],
             decode_urls: vec!["http://decode1".to_string()],
             prefill_policy: Some(PolicyConfig::CacheAware {
                 cache_threshold: 0.5,
@@ -1503,7 +1473,9 @@ mod tests {
             decode_policy: Some(PolicyConfig::PowerOfTwo {
                 load_check_interval_secs: 60,
             }),
-            discovery_address: None,
+            migration_protocol: LMDeployMigrationProtocol::default(),
+            rdma_config: None,
+            dummy_prefill: false,
         };
 
         let main_policy = PolicyConfig::Random;
@@ -1523,8 +1495,8 @@ mod tests {
     #[test]
     fn test_pd_policy_fallback_only_prefill() {
         // When only prefill policy is specified, decode should use main policy
-        let pd = RoutingMode::VllmPrefillDecode {
-            prefill_urls: vec![("http://prefill1".to_string(), None)],
+        let pd = RoutingMode::LMDeployPrefillDecode {
+            prefill_urls: vec!["http://prefill1".to_string()],
             decode_urls: vec!["http://decode1".to_string()],
             prefill_policy: Some(PolicyConfig::CacheAware {
                 cache_threshold: 0.5,
@@ -1534,7 +1506,9 @@ mod tests {
                 max_tree_size: 1000,
             }),
             decode_policy: None,
-            discovery_address: None,
+            migration_protocol: LMDeployMigrationProtocol::default(),
+            rdma_config: None,
+            dummy_prefill: false,
         };
 
         let main_policy = PolicyConfig::RoundRobin;
@@ -1555,14 +1529,16 @@ mod tests {
     #[test]
     fn test_pd_policy_fallback_only_decode() {
         // When only decode policy is specified, prefill should use main policy
-        let pd = RoutingMode::VllmPrefillDecode {
-            prefill_urls: vec![("http://prefill1".to_string(), None)],
+        let pd = RoutingMode::LMDeployPrefillDecode {
+            prefill_urls: vec!["http://prefill1".to_string()],
             decode_urls: vec!["http://decode1".to_string()],
             prefill_policy: None,
             decode_policy: Some(PolicyConfig::PowerOfTwo {
                 load_check_interval_secs: 60,
             }),
-            discovery_address: None,
+            migration_protocol: LMDeployMigrationProtocol::default(),
+            rdma_config: None,
+            dummy_prefill: false,
         };
 
         let main_policy = PolicyConfig::Random;
@@ -1583,12 +1559,14 @@ mod tests {
     #[test]
     fn test_pd_policy_fallback_none_specified() {
         // When no specific policies are specified, both should use main policy
-        let pd = RoutingMode::VllmPrefillDecode {
-            prefill_urls: vec![("http://prefill1".to_string(), None)],
+        let pd = RoutingMode::LMDeployPrefillDecode {
+            prefill_urls: vec!["http://prefill1".to_string()],
             decode_urls: vec!["http://decode1".to_string()],
             prefill_policy: None,
             decode_policy: None,
-            discovery_address: None,
+            migration_protocol: LMDeployMigrationProtocol::default(),
+            rdma_config: None,
+            dummy_prefill: false,
         };
 
         let main_policy = PolicyConfig::CacheAware {

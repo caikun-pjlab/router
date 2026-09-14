@@ -27,7 +27,7 @@ class RouterManager:
         port: Optional[int] = None,
         extra: Optional[Dict] = None,
         # PD options
-        vllm_pd_disaggregation: bool = False,
+        lmdeploy_pd_disaggregation: bool = False,
         prefill_urls: Optional[List[tuple]] = None,
         decode_urls: Optional[List[str]] = None,
         prefill_policy: Optional[str] = None,
@@ -55,8 +55,8 @@ class RouterManager:
             cmd.extend(["--worker-urls", *worker_urls])
 
         # PD routing configuration
-        if vllm_pd_disaggregation:
-            cmd.append("--vllm-pd-disaggregation")
+        if lmdeploy_pd_disaggregation:
+            cmd.append("--lmdeploy-pd-disaggregation")
             if prefill_urls:
                 for url, bport in prefill_urls:
                     if bport is None:

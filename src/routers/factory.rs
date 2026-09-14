@@ -1,10 +1,7 @@
 //! Factory for creating router instances
 
 use super::{
-    http::{
-        lmdeploy_pd_router::LMDeployPDRouter, openai_router::OpenAIRouter, router::Router,
-        vllm_pd_router::VllmPDRouter,
-    },
+    http::{lmdeploy_pd_router::LMDeployPDRouter, openai_router::OpenAIRouter, router::Router},
     RouterTrait,
 };
 use crate::config::{PolicyConfig, RoutingMode};
@@ -21,26 +18,6 @@ impl RouterFactory {
         match &ctx.router_config.mode {
             RoutingMode::Regular { worker_urls } => {
                 Self::create_regular_router(worker_urls, ctx).await
-            }
-            RoutingMode::VllmPrefillDecode {
-                prefill_urls,
-                decode_urls,
-                prefill_policy,
-                decode_policy,
-                discovery_address,
-            } => {
-                tracing::info!("Creating VllmPDRouter with prefill_urls: {:?}, decode_urls: {:?}, discovery: {:?}",
-                              prefill_urls, decode_urls, discovery_address);
-                Self::create_vllm_pd_router(
-                    prefill_urls,
-                    decode_urls,
-                    discovery_address.clone(),
-                    prefill_policy.as_ref(),
-                    decode_policy.as_ref(),
-                    &ctx.router_config.policy,
-                    ctx,
-                )
-                .await
             }
             RoutingMode::LMDeployPrefillDecode {
                 prefill_urls,
@@ -81,53 +58,6 @@ impl RouterFactory {
     ) -> Result<Box<dyn RouterTrait>, String> {
         // Create regular router with context
         let router = Router::new(worker_urls.to_vec(), ctx).await?;
-
-        Ok(Box::new(router))
-    }
-
-    /// Create a vLLM PD router with service discovery and/or static URLs
-    pub async fn create_vllm_pd_router(
-        prefill_urls: &[(String, Option<u16>)],
-        decode_urls: &[String],
-        discovery_address: Option<String>,
-        prefill_policy_config: Option<&PolicyConfig>,
-        decode_policy_config: Option<&PolicyConfig>,
-        main_policy_config: &PolicyConfig,
-        ctx: &Arc<AppContext>,
-    ) -> Result<Box<dyn RouterTrait>, String> {
-        // Initialize policies in PolicyRegistry - use specific policies if provided, otherwise fall back to main policy
-        let prefill_policy =
-            PolicyFactory::create_from_config(prefill_policy_config.unwrap_or(main_policy_config));
-        let decode_policy =
-            PolicyFactory::create_from_config(decode_policy_config.unwrap_or(main_policy_config));
-
-        // Set the prefill and decode policies in the registry
-        ctx.policy_registry.set_prefill_policy(prefill_policy);
-        ctx.policy_registry.set_decode_policy(decode_policy);
-
-        // Create vLLM PD router with both static URLs and service discovery support
-        if discovery_address.is_some() {
-            tracing::info!(
-                "Creating VllmPDRouter with service discovery at: {:?}",
-                discovery_address
-            );
-        }
-        if !prefill_urls.is_empty() || !decode_urls.is_empty() {
-            tracing::info!(
-                "Creating VllmPDRouter with static URLs - prefill: {:?}, decode: {:?}",
-                prefill_urls,
-                decode_urls
-            );
-        }
-
-        let router = VllmPDRouter::new(
-            prefill_urls.to_vec(),
-            decode_urls.to_vec(),
-            discovery_address,
-            ctx,
-        )
-        .await?;
-        tracing::info!("VllmPDRouter instance created successfully");
 
         Ok(Box::new(router))
     }

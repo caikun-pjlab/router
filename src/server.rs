@@ -1,5 +1,5 @@
 use crate::{
-    config::{HistoryBackend, RouterConfig, TraceConfig},
+    config::{HistoryBackend, LMDeployMigrationProtocol, RouterConfig, TraceConfig},
     core::{WorkerRegistry, WorkerType},
     data_connector::{MemoryResponseStorage, NoOpResponseStorage, SharedResponseStorage},
     logging::{self, LoggingConfig},
@@ -1160,11 +1160,13 @@ pub async fn startup(config: ServerConfig) -> Result<(), Box<dyn std::error::Err
                 }
             }
 
-            // 2. HTTP vLLM PD Router
-            match RouterFactory::create_vllm_pd_router(
+            // 2. HTTP LMDeploy PD Router
+            match RouterFactory::create_lmdeploy_pd_router(
                 &[],
                 &[],
+                LMDeployMigrationProtocol::default(),
                 None,
+                false,
                 None,
                 None,
                 &config.router_config.policy,
@@ -1173,7 +1175,7 @@ pub async fn startup(config: ServerConfig) -> Result<(), Box<dyn std::error::Err
             .await
             {
                 Ok(http_pd) => {
-                    info!("Created HTTP vLLM PD router");
+                    info!("Created HTTP LMDeploy PD router");
                     router_manager
                         .register_router(RouterId::new("http-pd".to_string()), Arc::from(http_pd));
                 }

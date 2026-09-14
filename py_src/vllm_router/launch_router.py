@@ -63,7 +63,7 @@ class CustomHelpFormatter(
 def parse_router_args(args: List[str]) -> RouterArgs:
     """Parse command line arguments and return RouterArgs instance."""
     parser = argparse.ArgumentParser(
-        description="""VLLM Router - High-performance request distribution across worker nodes
+        description="""LMDeploy Router - High-performance request distribution across worker nodes
 
 Usage:
 This launcher enables starting a router with individual worker instances. It is useful for
@@ -71,23 +71,10 @@ multi-node setups or when you want to start workers and router separately.
 
 Examples:
   # Regular mode
-  vllm-router --worker-urls http://worker1:8000 http://worker2:8000
+  lmdeploy-router --worker-urls http://worker1:8000 http://worker2:8000
 
-  # PD disaggregated mode with same policy for both
-  vllm-router --vllm-pd-disaggregation \\
-    --prefill http://prefill1:8000 9000 --prefill http://prefill2:8000 \\
-    --decode http://decode1:8001 --decode http://decode2:8001 \\
-    --policy cache_aware
-
-  # PD mode with optional bootstrap ports
-  vllm-router --vllm-pd-disaggregation \\
-    --prefill http://prefill1:8000 9000 \\    # With bootstrap port
-    --prefill http://prefill2:8000 none \\    # Explicitly no bootstrap port
-    --prefill http://prefill3:8000 \\         # Defaults to no bootstrap port
-    --decode http://decode1:8001 --decode http://decode2:8001
-
-  # PD mode with different policies for prefill and decode
-  vllm-router --vllm-pd-disaggregation \\
+  # PD disaggregated mode with different policies for prefill and decode
+  lmdeploy-router --lmdeploy-pd-disaggregation \\
     --prefill http://prefill1:8000 --prefill http://prefill2:8000 \\
     --decode http://decode1:8001 --decode http://decode2:8001 \\
     --prefill-policy cache_aware --decode-policy power_of_two

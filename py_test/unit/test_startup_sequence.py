@@ -146,7 +146,7 @@ class TestRouterInitialization:
     def test_router_initialization_pd_mode(self):
         """Test router initialization in PD mode."""
         args = RouterArgs(
-            vllm_pd_disaggregation=True,
+            lmdeploy_pd_disaggregation=True,
             prefill_urls=[("http://prefill1:8000", 9000)],
             decode_urls=["http://decode1:8001"],
             policy="power_of_two",
@@ -159,7 +159,7 @@ class TestRouterInitialization:
             def fake_from_args(router_args):
                 captured_args.update(
                     dict(
-                        vllm_pd_disaggregation=router_args.vllm_pd_disaggregation,
+                        lmdeploy_pd_disaggregation=router_args.lmdeploy_pd_disaggregation,
                         prefill_urls=router_args.prefill_urls,
                         decode_urls=router_args.decode_urls,
                         policy=policy_from_str(router_args.policy),
@@ -173,7 +173,7 @@ class TestRouterInitialization:
 
             # Verify Router.from_args was called with PD parameters
             router_mod.from_args.assert_called_once()
-            assert captured_args["vllm_pd_disaggregation"] is True
+            assert captured_args["lmdeploy_pd_disaggregation"] is True
             assert captured_args["prefill_urls"] == [("http://prefill1:8000", 9000)]
             assert captured_args["decode_urls"] == ["http://decode1:8001"]
             assert captured_args["policy"] == PolicyType.PowerOfTwo
@@ -466,25 +466,26 @@ class TestRouterInitialization:
 class TestStartupValidation:
     """Test startup validation logic."""
 
-    def test_pd_mode_validation_during_startup(self):
-        """Test PD mode validation during startup."""
-        # PD mode without URLs should fail
+    def test_pd_mode_without_urls_allows_dynamic_registration(self):
+        """Test that PD mode allows workers to register after startup."""
         args = RouterArgs(
-            vllm_pd_disaggregation=True,
+            lmdeploy_pd_disaggregation=True,
             prefill_urls=[],
             decode_urls=[],
             service_discovery=False,
         )
 
-        with pytest.raises(
-            ValueError, match="PD disaggregation mode requires --prefill"
-        ):
+        with patch("vllm_router.launch_router.Router") as router_mod:
+            mock_router_instance = MagicMock()
+            router_mod.from_args = MagicMock(return_value=mock_router_instance)
+
             launch_router(args)
+            router_mod.from_args.assert_called_once()
 
     def test_pd_mode_with_service_discovery_validation(self):
         """Test PD mode with service discovery validation during startup."""
         args = RouterArgs(
-            vllm_pd_disaggregation=True,
+            lmdeploy_pd_disaggregation=True,
             prefill_urls=[],
             decode_urls=[],
             service_discovery=True,
@@ -504,7 +505,7 @@ class TestStartupValidation:
     def test_policy_warning_during_startup(self):
         """Test policy warning during startup in PD mode."""
         args = RouterArgs(
-            vllm_pd_disaggregation=True,
+            lmdeploy_pd_disaggregation=True,
             prefill_urls=[("http://prefill1:8000", None)],
             decode_urls=["http://decode1:8001"],
             policy="cache_aware",
@@ -535,7 +536,7 @@ class TestStartupValidation:
         """Test policy info logging during startup in PD mode."""
         # Test with only prefill policy specified
         args = RouterArgs(
-            vllm_pd_disaggregation=True,
+            lmdeploy_pd_disaggregation=True,
             prefill_urls=[("http://prefill1:8000", None)],
             decode_urls=["http://decode1:8001"],
             policy="cache_aware",
@@ -563,7 +564,7 @@ class TestStartupValidation:
     def test_policy_info_decode_only_during_startup(self):
         """Test policy info logging during startup with only decode policy specified."""
         args = RouterArgs(
-            vllm_pd_disaggregation=True,
+            lmdeploy_pd_disaggregation=True,
             prefill_urls=[("http://prefill1:8000", None)],
             decode_urls=["http://decode1:8001"],
             policy="cache_aware",
@@ -664,7 +665,7 @@ class TestStartupFlow:
     def test_complete_startup_flow_pd_mode(self):
         """Test complete startup flow for PD mode configuration."""
         args = RouterArgs(
-            vllm_pd_disaggregation=True,
+            lmdeploy_pd_disaggregation=True,
             prefill_urls=[
                 ("http://prefill1:8000", 9000),
                 ("http://prefill2:8000", None),

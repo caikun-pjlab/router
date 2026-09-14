@@ -6,15 +6,7 @@ pub struct ConfigValidator;
 impl ConfigValidator {
     /// Validate a complete router configuration
     pub fn validate(config: &RouterConfig) -> ConfigResult<()> {
-        // Check if service discovery is enabled (either via discovery config or vLLM mode)
-        let has_service_discovery = config.discovery.as_ref().is_some_and(|d| d.enabled)
-            || matches!(
-                &config.mode,
-                RoutingMode::VllmPrefillDecode {
-                    discovery_address: Some(_),
-                    ..
-                }
-            );
+        let has_service_discovery = config.discovery.as_ref().is_some_and(|d| d.enabled);
 
         Self::validate_mode(&config.mode, has_service_discovery)?;
         Self::validate_policy(&config.policy)?;
@@ -40,7 +32,7 @@ impl ConfigValidator {
     }
 
     /// Validate routing mode configuration
-    fn validate_mode(mode: &RoutingMode, has_service_discovery: bool) -> ConfigResult<()> {
+    fn validate_mode(mode: &RoutingMode, _has_service_discovery: bool) -> ConfigResult<()> {
         match mode {
             RoutingMode::Regular { worker_urls } => {
                 // Validate URLs if any are provided
@@ -50,60 +42,6 @@ impl ConfigValidator {
                 // Note: We allow empty worker URLs even without service discovery
                 // to let the router start and fail at runtime when routing requests.
                 // This matches legacy behavior and test expectations.
-            }
-            RoutingMode::VllmPrefillDecode {
-                prefill_urls,
-                decode_urls,
-                prefill_policy,
-                decode_policy,
-                discovery_address: _,
-            } => {
-                // Only require URLs if service discovery is disabled
-                if !has_service_discovery {
-                    if prefill_urls.is_empty() {
-                        return Err(ConfigError::ValidationFailed {
-                            reason: "vLLM PD mode requires at least one prefill worker URL"
-                                .to_string(),
-                        });
-                    }
-                    if decode_urls.is_empty() {
-                        return Err(ConfigError::ValidationFailed {
-                            reason: "vLLM PD mode requires at least one decode worker URL"
-                                .to_string(),
-                        });
-                    }
-                }
-
-                // Validate URLs if any are provided
-                if !prefill_urls.is_empty() {
-                    let prefill_url_strings: Vec<String> =
-                        prefill_urls.iter().map(|(url, _)| url.clone()).collect();
-                    Self::validate_urls(&prefill_url_strings)?;
-                }
-                if !decode_urls.is_empty() {
-                    Self::validate_urls(decode_urls)?;
-                }
-
-                // Validate bootstrap ports
-                for (_url, port) in prefill_urls {
-                    if let Some(port) = port {
-                        if *port == 0 {
-                            return Err(ConfigError::InvalidValue {
-                                field: "bootstrap_port".to_string(),
-                                value: port.to_string(),
-                                reason: "Port must be between 1 and 65535".to_string(),
-                            });
-                        }
-                    }
-                }
-
-                // Validate optional prefill and decode policies
-                if let Some(p_policy) = prefill_policy {
-                    Self::validate_policy(p_policy)?;
-                }
-                if let Some(d_policy) = decode_policy {
-                    Self::validate_policy(d_policy)?;
-                }
             }
             RoutingMode::LMDeployPrefillDecode {
                 prefill_urls,
@@ -296,13 +234,6 @@ impl ConfigValidator {
                     });
                 }
             }
-            RoutingMode::VllmPrefillDecode { .. } => {
-                if discovery.prefill_selector.is_empty() && discovery.decode_selector.is_empty() {
-                    return Err(ConfigError::ValidationFailed {
-                        reason: "vLLM PD mode with service discovery requires at least one non-empty selector (prefill or decode)".to_string(),
-                    });
-                }
-            }
             RoutingMode::LMDeployPrefillDecode { .. } => {
                 if discovery.prefill_selector.is_empty() && discovery.decode_selector.is_empty() {
                     return Err(ConfigError::ValidationFailed {
@@ -425,18 +356,7 @@ impl ConfigValidator {
         // All policies are now supported for both router types thanks to the unified trait design
         // No mode/policy restrictions needed anymore
 
-        // Check if service discovery is enabled for worker count validation.
-        // This covers both K8s service discovery (config.discovery) and vLLM ZMQ
-        // service discovery (VllmPrefillDecode { discovery_address: Some(_) }).
-        let has_vllm_discovery = matches!(
-            &config.mode,
-            RoutingMode::VllmPrefillDecode {
-                discovery_address: Some(_),
-                ..
-            }
-        );
-        let has_service_discovery =
-            config.discovery.as_ref().is_some_and(|d| d.enabled) || has_vllm_discovery;
+        let has_service_discovery = config.discovery.as_ref().is_some_and(|d| d.enabled);
 
         // Only validate worker counts if service discovery is disabled
         if !has_service_discovery {
@@ -449,36 +369,6 @@ impl ConfigValidator {
                     return Err(ConfigError::IncompatibleConfig {
                         reason: "Power-of-two policy requires at least 2 workers".to_string(),
                     });
-                }
-            }
-
-            // For vLLM PD mode, validate that policies have sufficient workers
-            if let RoutingMode::VllmPrefillDecode {
-                prefill_urls,
-                decode_urls,
-                prefill_policy,
-                decode_policy,
-                ..
-            } = &config.mode
-            {
-                // Check power-of-two for prefill
-                if let Some(PolicyConfig::PowerOfTwo { .. }) = prefill_policy {
-                    if !prefill_urls.is_empty() && prefill_urls.len() < 2 {
-                        return Err(ConfigError::IncompatibleConfig {
-                            reason: "Power-of-two policy for prefill requires at least 2 prefill workers".to_string(),
-                        });
-                    }
-                }
-
-                // Check power-of-two for decode
-                if let Some(PolicyConfig::PowerOfTwo { .. }) = decode_policy {
-                    if !decode_urls.is_empty() && decode_urls.len() < 2 {
-                        return Err(ConfigError::IncompatibleConfig {
-                            reason:
-                                "Power-of-two policy for decode requires at least 2 decode workers"
-                                    .to_string(),
-                        });
-                    }
                 }
             }
 
@@ -511,20 +401,6 @@ impl ConfigValidator {
                     }
                 }
             }
-        }
-
-        // DP-aware routing is now automatically enabled when data_parallel_size > 1
-        // and is compatible with service discovery
-
-        // MoRI-IO requires service discovery: ZMQ addresses are obtained via instance
-        // registration and are not available in direct URL mode.
-        if config.kv_connector == KvConnector::MoriIO && !has_vllm_discovery {
-            return Err(ConfigError::IncompatibleConfig {
-                reason: "MoRI-IO KV connector requires service discovery to be enabled \
-                         (ZMQ addresses are obtained via instance registration). Please \
-                        run with `--vllm-discovery-address ${address}`"
-                    .to_string(),
-            });
         }
 
         Ok(())
@@ -680,12 +556,14 @@ mod tests {
     #[test]
     fn test_validate_pd_mode() {
         let config = RouterConfig::new(
-            RoutingMode::VllmPrefillDecode {
-                prefill_urls: vec![("http://prefill:8000".to_string(), Some(8081))],
+            RoutingMode::LMDeployPrefillDecode {
+                prefill_urls: vec!["http://prefill:8000".to_string()],
                 decode_urls: vec!["http://decode:8000".to_string()],
                 prefill_policy: None,
                 decode_policy: None,
-                discovery_address: None,
+                migration_protocol: LMDeployMigrationProtocol::Rdma,
+                rdma_config: None,
+                dummy_prefill: false,
             },
             PolicyConfig::Random,
         );
@@ -715,12 +593,14 @@ mod tests {
     fn test_validate_roundrobin_with_pd_mode() {
         // RoundRobin with PD mode is now supported
         let config = RouterConfig::new(
-            RoutingMode::VllmPrefillDecode {
-                prefill_urls: vec![("http://prefill:8000".to_string(), None)],
+            RoutingMode::LMDeployPrefillDecode {
+                prefill_urls: vec!["http://prefill:8000".to_string()],
                 decode_urls: vec!["http://decode:8000".to_string()],
                 prefill_policy: None,
                 decode_policy: None,
-                discovery_address: None,
+                migration_protocol: LMDeployMigrationProtocol::Rdma,
+                rdma_config: None,
+                dummy_prefill: false,
             },
             PolicyConfig::RoundRobin,
         );
@@ -733,12 +613,14 @@ mod tests {
     fn test_validate_cache_aware_with_pd_mode() {
         // CacheAware with PD mode is now supported
         let config = RouterConfig::new(
-            RoutingMode::VllmPrefillDecode {
-                prefill_urls: vec![("http://prefill:8000".to_string(), None)],
+            RoutingMode::LMDeployPrefillDecode {
+                prefill_urls: vec!["http://prefill:8000".to_string()],
                 decode_urls: vec!["http://decode:8000".to_string()],
                 prefill_policy: None,
                 decode_policy: None,
-                discovery_address: None,
+                migration_protocol: LMDeployMigrationProtocol::Rdma,
+                rdma_config: None,
+                dummy_prefill: false,
             },
             PolicyConfig::CacheAware {
                 cache_threshold: 0.5,
@@ -776,10 +658,10 @@ mod tests {
     fn test_validate_pd_mode_with_separate_policies() {
         // Test PD mode with different policies for prefill and decode
         let config = RouterConfig::new(
-            RoutingMode::VllmPrefillDecode {
+            RoutingMode::LMDeployPrefillDecode {
                 prefill_urls: vec![
-                    ("http://prefill1:8000".to_string(), None),
-                    ("http://prefill2:8000".to_string(), None),
+                    "http://prefill1:8000".to_string(),
+                    "http://prefill2:8000".to_string(),
                 ],
                 decode_urls: vec![
                     "http://decode1:8000".to_string(),
@@ -795,7 +677,9 @@ mod tests {
                 decode_policy: Some(PolicyConfig::PowerOfTwo {
                     load_check_interval_secs: 60,
                 }),
-                discovery_address: None,
+                migration_protocol: LMDeployMigrationProtocol::Rdma,
+                rdma_config: None,
+                dummy_prefill: false,
             },
             PolicyConfig::Random, // Main policy as fallback
         );
@@ -808,8 +692,8 @@ mod tests {
     fn test_validate_pd_mode_power_of_two_insufficient_workers() {
         // Test that power-of-two policy requires at least 2 workers
         let config = RouterConfig::new(
-            RoutingMode::VllmPrefillDecode {
-                prefill_urls: vec![("http://prefill1:8000".to_string(), None)], // Only 1 prefill
+            RoutingMode::LMDeployPrefillDecode {
+                prefill_urls: vec!["http://prefill1:8000".to_string()], // Only 1 prefill
                 decode_urls: vec![
                     "http://decode1:8000".to_string(),
                     "http://decode2:8000".to_string(),
@@ -818,7 +702,9 @@ mod tests {
                     load_check_interval_secs: 60,
                 }), // Requires 2+ workers
                 decode_policy: None,
-                discovery_address: None,
+                migration_protocol: LMDeployMigrationProtocol::Rdma,
+                rdma_config: None,
+                dummy_prefill: false,
             },
             PolicyConfig::Random,
         );
@@ -828,43 +714,5 @@ mod tests {
         if let Err(e) = result {
             assert!(e.to_string().contains("prefill requires at least 2"));
         }
-    }
-
-    #[test]
-    fn test_moriio_requires_service_discovery() {
-        let mut config = RouterConfig::new(
-            RoutingMode::Regular {
-                worker_urls: vec!["http://worker:8000".to_string()],
-            },
-            PolicyConfig::Random,
-        );
-        config.kv_connector = KvConnector::MoriIO;
-        config.discovery = None;
-
-        let result = ConfigValidator::validate(&config);
-        assert!(result.is_err());
-        if let Err(e) = result {
-            assert!(e
-                .to_string()
-                .contains("MoRI-IO KV connector requires service discovery"));
-        }
-    }
-
-    #[test]
-    fn test_moriio_with_service_discovery_is_valid() {
-        let mut config = RouterConfig::new(
-            RoutingMode::VllmPrefillDecode {
-                prefill_urls: vec![],
-                decode_urls: vec![],
-                prefill_policy: None,
-                decode_policy: None,
-                discovery_address: Some("0.0.0.0:36367".to_string()),
-            },
-            PolicyConfig::Random,
-        );
-        config.kv_connector = KvConnector::MoriIO;
-
-        let result = ConfigValidator::validate(&config);
-        assert!(result.is_ok());
     }
 }

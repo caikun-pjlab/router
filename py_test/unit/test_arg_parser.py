@@ -24,7 +24,6 @@ class TestRouterArgs:
         assert args.port == 30000
         assert args.policy == "cache_aware"
         assert args.worker_urls == []
-        assert args.vllm_pd_disaggregation is False
         assert args.prefill_urls == []
         assert args.decode_urls == []
 
@@ -145,7 +144,6 @@ class TestRouterArgs:
             prefill=None,
             decode=None,
             router_policy="round_robin",
-            router_vllm_pd_disaggregation=False,
             router_prefill_policy=None,
             router_decode_policy=None,
             router_worker_startup_timeout_secs=300,
@@ -202,7 +200,6 @@ class TestRouterArgs:
         assert router_args.policy == "round_robin"
 
         # Test PD configuration
-        assert router_args.vllm_pd_disaggregation is False
         assert router_args.prefill_urls == []
         assert router_args.decode_urls == []
 
@@ -269,7 +266,7 @@ class TestRouterArgs:
             ],
             router_decode=[["http://decode1:8001"], ["http://decode2:8001"]],
             router_policy="cache_aware",
-            router_vllm_pd_disaggregation=True,
+            router_lmdeploy_pd_disaggregation=True,
             router_prefill_policy="power_of_two",
             router_decode_policy="round_robin",
             # Include all required fields with defaults
@@ -321,7 +318,7 @@ class TestRouterArgs:
         router_args = RouterArgs.from_cli_args(args, use_router_prefix=True)
 
         # Test PD configuration
-        assert router_args.vllm_pd_disaggregation is True
+        assert router_args.lmdeploy_pd_disaggregation is True
         assert router_args.prefill_urls == [
             ("http://prefill1:8000", 9000),
             ("http://prefill2:8000", None),
@@ -340,7 +337,6 @@ class TestRouterArgs:
             policy="random",
             prefill=None,
             decode=None,
-            vllm_pd_disaggregation=False,
             prefill_policy=None,
             decode_policy=None,
             worker_startup_timeout_secs=600,
@@ -394,7 +390,6 @@ class TestRouterArgs:
         assert router_args.port == 30000
         assert router_args.worker_urls == ["http://worker1:8000"]
         assert router_args.policy == "random"
-        assert router_args.vllm_pd_disaggregation is False
 
 
 class TestPolicyFromStr:
@@ -443,7 +438,7 @@ class TestParseRouterArgs:
     def test_parse_pd_args(self):
         """Test parsing PD disaggregated mode arguments."""
         args = [
-            "--vllm-pd-disaggregation",
+            "--lmdeploy-pd-disaggregation",
             "--prefill",
             "http://prefill1:8000",
             "9000",
@@ -462,7 +457,7 @@ class TestParseRouterArgs:
 
         router_args = parse_router_args(args)
 
-        assert router_args.vllm_pd_disaggregation is True
+        assert router_args.lmdeploy_pd_disaggregation is True
         assert router_args.prefill_urls == [
             ("http://prefill1:8000", 9000),
             ("http://prefill2:8000", None),
@@ -607,7 +602,7 @@ class TestParseRouterArgs:
         with pytest.raises(ValueError, match="Invalid bootstrap port"):
             parse_router_args(
                 [
-                    "--vllm-pd-disaggregation",
+                    "--lmdeploy-pd-disaggregation",
                     "--prefill",
                     "http://prefill1:8000",
                     "invalid_port",

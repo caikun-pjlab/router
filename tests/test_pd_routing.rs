@@ -1,7 +1,8 @@
 #[cfg(test)]
 mod test_pd_routing {
     use vllm_router_rs::config::{
-        CircuitBreakerConfig, ConnectionMode, PolicyConfig, RetryConfig, RouterConfig, RoutingMode,
+        CircuitBreakerConfig, ConnectionMode, LMDeployMigrationProtocol, PolicyConfig, RetryConfig,
+        RouterConfig, RoutingMode,
     };
     use vllm_router_rs::routers::RouterFactory;
 
@@ -47,10 +48,10 @@ mod test_pd_routing {
         // In the new structure, RoutingMode and PolicyConfig are separate
         let test_cases = vec![
             (
-                RoutingMode::VllmPrefillDecode {
+                RoutingMode::LMDeployPrefillDecode {
                     prefill_urls: vec![
-                        ("http://prefill1:8080".to_string(), Some(9000)),
-                        ("http://prefill2:8080".to_string(), None),
+                        "http://prefill1:8080".to_string(),
+                        "http://prefill2:8080".to_string(),
                     ],
                     decode_urls: vec![
                         "http://decode1:8080".to_string(),
@@ -58,33 +59,39 @@ mod test_pd_routing {
                     ],
                     prefill_policy: None,
                     decode_policy: None,
-                    discovery_address: None,
+                    migration_protocol: LMDeployMigrationProtocol::Rdma,
+                    rdma_config: None,
+                    dummy_prefill: false,
                 },
                 PolicyConfig::Random,
             ),
             (
-                RoutingMode::VllmPrefillDecode {
-                    prefill_urls: vec![("http://prefill:8080".to_string(), Some(9000))],
+                RoutingMode::LMDeployPrefillDecode {
+                    prefill_urls: vec!["http://prefill:8080".to_string()],
                     decode_urls: vec!["http://decode:8080".to_string()],
                     prefill_policy: None,
                     decode_policy: None,
-                    discovery_address: None,
+                    migration_protocol: LMDeployMigrationProtocol::Rdma,
+                    rdma_config: None,
+                    dummy_prefill: false,
                 },
                 PolicyConfig::PowerOfTwo {
                     load_check_interval_secs: 5,
                 },
             ),
             (
-                RoutingMode::VllmPrefillDecode {
+                RoutingMode::LMDeployPrefillDecode {
                     prefill_urls: vec![
-                        ("http://p1:8080".to_string(), Some(9000)),
-                        ("http://p2:8080".to_string(), Some(9001)),
-                        ("http://p3:8080".to_string(), Some(9002)),
+                        "http://p1:8080".to_string(),
+                        "http://p2:8080".to_string(),
+                        "http://p3:8080".to_string(),
                     ],
                     decode_urls: vec!["http://d1:8080".to_string(), "http://d2:8080".to_string()],
                     prefill_policy: None,
                     decode_policy: None,
-                    discovery_address: None,
+                    migration_protocol: LMDeployMigrationProtocol::Rdma,
+                    rdma_config: None,
+                    dummy_prefill: false,
                 },
                 PolicyConfig::CacheAware {
                     cache_threshold: 0.7,

@@ -11,7 +11,8 @@ use serde_json::json;
 use std::sync::Arc;
 use tower::ServiceExt;
 use vllm_router_rs::config::{
-    CircuitBreakerConfig, ConnectionMode, PolicyConfig, RetryConfig, RouterConfig, RoutingMode,
+    CircuitBreakerConfig, ConnectionMode, LMDeployMigrationProtocol, PolicyConfig, RetryConfig,
+    RouterConfig, RoutingMode,
 };
 use vllm_router_rs::routers::{RouterFactory, RouterTrait};
 
@@ -1709,20 +1710,15 @@ mod pd_mode_tests {
 
         tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
 
-        // Extract port from prefill URL
-        let prefill_port = prefill_url
-            .split(':')
-            .next_back()
-            .and_then(|p| p.trim_end_matches('/').parse::<u16>().ok())
-            .unwrap_or(9000);
-
         let config = RouterConfig {
-            mode: RoutingMode::VllmPrefillDecode {
-                prefill_urls: vec![(prefill_url, Some(prefill_port))],
+            mode: RoutingMode::LMDeployPrefillDecode {
+                prefill_urls: vec![prefill_url],
                 decode_urls: vec![decode_url],
                 prefill_policy: None,
                 decode_policy: None,
-                discovery_address: None,
+                migration_protocol: LMDeployMigrationProtocol::Rdma,
+                rdma_config: None,
+                dummy_prefill: false,
             },
             policy: PolicyConfig::Random,
             host: "127.0.0.1".to_string(),

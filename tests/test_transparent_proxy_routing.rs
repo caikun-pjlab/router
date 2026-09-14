@@ -1,7 +1,7 @@
 //! Tests for transparent proxy routing with headers and availability filtering.
 //!
 //! These tests verify the fixes to route_transparent() across router
-//! implementations (Router, VllmPDRouter):
+//! implementations (Router, LMDeployPDRouter):
 //!   1. Headers are passed to select_worker_with_headers() for consistent hash routing
 //!   2. Workers are filtered by is_available() before selection
 //!   3. The inline header conversion pattern (used in vllm_pd_router) matches

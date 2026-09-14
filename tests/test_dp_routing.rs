@@ -238,7 +238,8 @@ mod dp_e2e_tests {
     use serde_json::json;
     use tower::ServiceExt;
     use vllm_router_rs::config::{
-        CircuitBreakerConfig, ConnectionMode, PolicyConfig, RetryConfig, RouterConfig, RoutingMode,
+        CircuitBreakerConfig, ConnectionMode, LMDeployMigrationProtocol, PolicyConfig, RetryConfig,
+        RouterConfig, RoutingMode,
     };
     use vllm_router_rs::routers::RouterFactory;
 
@@ -288,13 +289,16 @@ mod dp_e2e_tests {
         decode_urls: Vec<String>,
         dp_size: usize,
     ) -> RouterConfig {
+        let prefill_urls = prefill_urls.into_iter().map(|(url, _)| url).collect();
         RouterConfig {
-            mode: RoutingMode::VllmPrefillDecode {
+            mode: RoutingMode::LMDeployPrefillDecode {
                 prefill_urls,
                 decode_urls,
                 prefill_policy: None,
                 decode_policy: None,
-                discovery_address: None,
+                migration_protocol: LMDeployMigrationProtocol::Rdma,
+                rdma_config: None,
+                dummy_prefill: false,
             },
             policy: PolicyConfig::RoundRobin,
             host: "127.0.0.1".to_string(),
@@ -568,11 +572,11 @@ mod dp_e2e_tests {
     }
 
     // -----------------------------------------------------------------
-    // vLLM PD Router + DP > 1: worker registry verification
+    // LMDeploy PD Router + DP > 1: worker registry verification
     // -----------------------------------------------------------------
 
     #[tokio::test]
-    async fn test_vllm_pd_router_dp2_creates_dp_aware_workers() {
+    async fn test_lmdeploy_pd_router_dp2_creates_dp_aware_workers() {
         let mut prefill_worker = MockWorker::new(MockWorkerConfig {
             port: 0,
             worker_type: WorkerType::Prefill,
@@ -636,14 +640,14 @@ mod dp_e2e_tests {
     }
 
     // -----------------------------------------------------------------
-    // vLLM PD Router + DP > 1: add_prefill_server / add_decode_server runtime path
+    // LMDeploy PD Router + DP > 1: add_prefill_server / add_decode_server runtime path
     // -----------------------------------------------------------------
     // These tests verify the fix for D100422851: when dp_size > 1,
     // add_prefill_server/add_decode_server must create DPAwareWorker
     // (not BasicWorker) to prevent IPv6+DP URL corruption.
 
     #[tokio::test]
-    async fn test_vllm_pd_router_add_prefill_server_dp2_creates_dp_aware_worker() {
+    async fn test_lmdeploy_pd_router_add_prefill_server_dp2_creates_dp_aware_worker() {
         // Start initial PD workers for router creation
         let mut initial_prefill = MockWorker::new(MockWorkerConfig {
             port: 0,
@@ -686,14 +690,12 @@ mod dp_e2e_tests {
         // Initial workers: 1 prefill × 2 + 1 decode × 2 = 4
         assert_eq!(app_context.worker_registry.get_all().len(), 4);
 
-        // Downcast to the user-facing vLLM PD router and add a new prefill server at runtime.
-        use vllm_router_rs::routers::http::vllm_pd_router::VllmPDRouter;
-        let pd_router = router.as_any().downcast_ref::<VllmPDRouter>().unwrap();
+        // Downcast to the user-facing LMDeploy PD router and add a new prefill server at runtime.
+        use vllm_router_rs::routers::http::lmdeploy_pd_router::LMDeployPDRouter;
+        let pd_router = router.as_any().downcast_ref::<LMDeployPDRouter>().unwrap();
 
         // Add new prefill server (plain URL, no @rank — mimics service discovery)
-        let result = pd_router
-            .add_prefill_server(new_prefill_url.clone(), None)
-            .await;
+        let result = pd_router.add_prefill_server(new_prefill_url.clone()).await;
         assert!(
             result.is_ok(),
             "add_prefill_server should succeed: {:?}",
@@ -738,7 +740,7 @@ mod dp_e2e_tests {
     }
 
     #[tokio::test]
-    async fn test_vllm_pd_router_add_decode_server_dp2_creates_dp_aware_worker() {
+    async fn test_lmdeploy_pd_router_add_decode_server_dp2_creates_dp_aware_worker() {
         let mut initial_prefill = MockWorker::new(MockWorkerConfig {
             port: 0,
             worker_type: WorkerType::Prefill,
@@ -776,8 +778,8 @@ mod dp_e2e_tests {
 
         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
-        use vllm_router_rs::routers::http::vllm_pd_router::VllmPDRouter;
-        let pd_router = router.as_any().downcast_ref::<VllmPDRouter>().unwrap();
+        use vllm_router_rs::routers::http::lmdeploy_pd_router::LMDeployPDRouter;
+        let pd_router = router.as_any().downcast_ref::<LMDeployPDRouter>().unwrap();
 
         // Add new decode server at runtime
         let result = pd_router.add_decode_server(new_decode_url.clone()).await;
@@ -812,7 +814,7 @@ mod dp_e2e_tests {
     }
 
     #[tokio::test]
-    async fn test_vllm_pd_router_add_prefill_server_dp1_creates_basic_worker() {
+    async fn test_lmdeploy_pd_router_add_prefill_server_dp1_creates_basic_worker() {
         // With dp_size=1, add_prefill_server should create BasicWorker
         let mut initial_prefill = MockWorker::new(MockWorkerConfig {
             port: 0,
@@ -850,12 +852,10 @@ mod dp_e2e_tests {
 
         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
-        use vllm_router_rs::routers::http::vllm_pd_router::VllmPDRouter;
-        let pd_router = router.as_any().downcast_ref::<VllmPDRouter>().unwrap();
+        use vllm_router_rs::routers::http::lmdeploy_pd_router::LMDeployPDRouter;
+        let pd_router = router.as_any().downcast_ref::<LMDeployPDRouter>().unwrap();
 
-        let result = pd_router
-            .add_prefill_server(new_prefill_url.clone(), None)
-            .await;
+        let result = pd_router.add_prefill_server(new_prefill_url.clone()).await;
         assert!(result.is_ok());
 
         // With dp_size=1, worker is registered with the original URL (no @rank)
@@ -878,7 +878,7 @@ mod dp_e2e_tests {
     }
 
     #[tokio::test]
-    async fn test_vllm_pd_router_dp1_creates_basic_workers() {
+    async fn test_lmdeploy_pd_router_dp1_creates_basic_workers() {
         let mut prefill_worker = MockWorker::new(MockWorkerConfig {
             port: 0,
             worker_type: WorkerType::Prefill,

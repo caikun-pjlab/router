@@ -1,8 +1,8 @@
 use clap::{ArgAction, Parser, ValueEnum};
 use std::collections::HashMap;
 use vllm_router_rs::config::{
-    CircuitBreakerConfig, ConfigError, ConfigResult, ConnectionMode, DiscoveryConfig,
-    HealthCheckConfig, HistoryBackend, KvConnector, LMDeployMigrationProtocol, LMDeployRdmaConfig,
+    CircuitBreakerConfig, ConfigResult, ConnectionMode, DiscoveryConfig, HealthCheckConfig,
+    HistoryBackend, KvConnector, LMDeployMigrationProtocol, LMDeployRdmaConfig,
     LMDeployRdmaLinkType, MetricsConfig, PolicyConfig, RetryConfig, RouterConfig, RoutingMode,
     TraceConfig,
 };
@@ -95,15 +95,6 @@ Examples:
   lmdeploy serve api_server MODEL --role Prefill --proxy-url http://router:30000
   lmdeploy serve api_server MODEL --role Decode --proxy-url http://router:30000
 
-  # vLLM PD mode with pure service discovery (workers register themselves)
-  lmdeploy-router --vllm-pd-disaggregation \
-    --vllm-discovery-address 0.0.0.0:30001 \
-    --policy consistent_hash
-
-  # Note: In vLLM mode, prefill/decode workers automatically register their
-  # HTTP and ZMQ addresses via service discovery. No static --prefill or
-  # --decode parameters are needed.
-
 "#)]
 struct CliArgs {
     /// Host address to bind the router server
@@ -121,15 +112,6 @@ struct CliArgs {
     /// Load balancing policy to use
     #[arg(long, default_value = "cache_aware", value_parser = ["random", "round_robin", "cache_aware", "power_of_two", "consistent_hash", "rendezvous_hash"])]
     policy: String,
-
-    /// Enable vLLM PD (Prefill-Decode) disaggregated mode with vLLM-specific two-stage processing
-    #[arg(long, default_value_t = false)]
-    vllm_pd_disaggregation: bool,
-
-    /// ZMQ service discovery address for vLLM P2P NCCL coordination (e.g., "0.0.0.0:30001")
-    /// Required for --vllm-pd-disaggregation mode. Workers register their HTTP and ZMQ addresses here.
-    #[arg(long)]
-    vllm_discovery_address: Option<String>,
 
     /// Decode server URL (can be specified multiple times)
     #[arg(long, action = ArgAction::Append)]
@@ -414,13 +396,6 @@ impl CliArgs {
         &self,
         prefill_urls: Vec<(String, Option<u16>)>,
     ) -> ConfigResult<RouterConfig> {
-        if self.vllm_pd_disaggregation && self.lmdeploy_pd_disaggregation {
-            return Err(ConfigError::ValidationFailed {
-                reason: "--vllm-pd-disaggregation and --lmdeploy-pd-disaggregation are mutually exclusive"
-                    .to_string(),
-            });
-        }
-
         // Determine routing mode
         let mode = if self.enable_igw {
             // IGW mode - routing mode is not used in IGW, but we need to provide a placeholder
@@ -431,60 +406,6 @@ impl CliArgs {
             // OpenAI backend mode - use worker_urls as base(s)
             RoutingMode::OpenAI {
                 worker_urls: self.worker_urls.clone(),
-            }
-        } else if self.vllm_pd_disaggregation {
-            // Use decode URLs from CLI arguments (already parsed by clap)
-            let decode_urls = &self.decode;
-
-            // Support multiple discovery/configuration modes:
-            // 1. Static URLs (--prefill/--decode)
-            // 2. vLLM ZMQ discovery (--vllm-discovery-address)
-            // 3. K8s service discovery (--service-discovery with --prefill-selector/--decode-selector)
-            let use_static_urls = !prefill_urls.is_empty() || !decode_urls.is_empty();
-            let use_vllm_discovery = self.vllm_discovery_address.is_some();
-            let use_k8s_discovery = self.service_discovery
-                && (!self.prefill_selector.is_empty() || !self.decode_selector.is_empty());
-
-            if !use_static_urls && !use_vllm_discovery && !use_k8s_discovery {
-                return Err(ConfigError::ValidationFailed {
-                    reason: "vLLM PD disaggregation mode requires one of: --vllm-discovery-address, --prefill/--decode URLs, or --service-discovery with --prefill-selector/--decode-selector".to_string(),
-                });
-            }
-
-            // Use decode URLs directly from CLI
-            let final_decode_urls = decode_urls.clone();
-
-            // Log the discovery/configuration mode being used
-            if use_k8s_discovery {
-                eprintln!("ℹ️  INFO: Using K8s service discovery mode for vLLM PD disaggregation.");
-                eprintln!("   Prefill selector: {:?}", self.prefill_selector);
-                eprintln!("   Decode selector: {:?}", self.decode_selector);
-                if use_static_urls {
-                    eprintln!(
-                        "   Static fallback URLs - Prefill: {:?}, Decode: {:?}",
-                        prefill_urls, final_decode_urls
-                    );
-                }
-            } else if use_static_urls && use_vllm_discovery {
-                eprintln!("ℹ️  INFO: Using hybrid mode - static URLs as fallback, vLLM ZMQ discovery for dynamic workers.");
-                eprintln!("   Prefill URLs: {:?}", prefill_urls);
-                eprintln!("   Decode URLs: {:?}", final_decode_urls);
-                eprintln!("   Discovery address: {:?}", self.vllm_discovery_address);
-            } else if use_static_urls {
-                eprintln!("ℹ️  INFO: Using static URL mode without service discovery.");
-                eprintln!("   Prefill URLs: {:?}", prefill_urls);
-                eprintln!("   Decode URLs: {:?}", final_decode_urls);
-            } else {
-                eprintln!("ℹ️  INFO: Using vLLM ZMQ service discovery mode.");
-                eprintln!("   Discovery address: {:?}", self.vllm_discovery_address);
-            }
-
-            RoutingMode::VllmPrefillDecode {
-                prefill_urls: prefill_urls.clone(),
-                decode_urls: final_decode_urls,
-                prefill_policy: self.prefill_policy.as_ref().map(|p| self.parse_policy(p)),
-                decode_policy: self.decode_policy.as_ref().map(|p| self.parse_policy(p)),
-                discovery_address: self.vllm_discovery_address.clone(),
             }
         } else if self.lmdeploy_pd_disaggregation {
             // LMDeploy PD disaggregation mode
@@ -643,7 +564,7 @@ impl CliArgs {
                 port: self.service_discovery_port,
                 namespace: self.service_discovery_namespace.clone(),
                 // HTTP service discovery supports both PD router implementations.
-                pd_mode: self.vllm_pd_disaggregation || self.lmdeploy_pd_disaggregation,
+                pd_mode: self.lmdeploy_pd_disaggregation,
                 prefill_selector: Self::parse_selector(&self.prefill_selector),
                 decode_selector: Self::parse_selector(&self.decode_selector),
                 bootstrap_port_annotation: "vllm.ai/bootstrap-port".to_string(),
@@ -729,11 +650,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("DEBUG: Filtered args: {:?}", filtered_args);
     let cli_args = CliArgs::parse_from(filtered_args);
     println!("DEBUG: CLI args parsed successfully");
-    println!(
-        "DEBUG: vllm_pd_disaggregation: {}",
-        cli_args.vllm_pd_disaggregation
-    );
-
     // Print startup info
     println!("VLLM Router starting...");
     println!("Host: {}:{}", cli_args.host, cli_args.port);
@@ -741,8 +657,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "IGW (Inference Gateway)".to_string()
     } else if matches!(cli_args.backend, Backend::Openai) {
         "OpenAI Backend".to_string()
-    } else if cli_args.vllm_pd_disaggregation {
-        "vLLM PD Disaggregated".to_string()
     } else if cli_args.lmdeploy_pd_disaggregation {
         "LMDeploy PD Disaggregated".to_string()
     } else {
@@ -765,10 +679,7 @@ Provide --worker-urls or PD flags as usual.",
     if !cli_args.enable_igw {
         println!("Policy: {}", cli_args.policy);
 
-        if cli_args.vllm_pd_disaggregation && !prefill_urls.is_empty() {
-            println!("Prefill nodes: {:?}", prefill_urls);
-            println!("Decode nodes: {:?}", cli_args.decode);
-        } else if cli_args.lmdeploy_pd_disaggregation {
+        if cli_args.lmdeploy_pd_disaggregation {
             println!("LMDeploy Prefill nodes: {:?}", prefill_urls);
             println!("LMDeploy Decode nodes: {:?}", cli_args.decode);
         }

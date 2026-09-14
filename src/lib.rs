@@ -65,8 +65,6 @@ struct Router {
     prometheus_host: Option<String>,
     request_timeout_secs: u64,
     request_id_headers: Option<Vec<String>>,
-    vllm_pd_disaggregation: bool,
-    vllm_discovery_address: Option<String>,
     prefill_urls: Option<Vec<(String, Option<u16>)>>,
     decode_urls: Option<Vec<String>>,
     prefill_policy: Option<PolicyType>,
@@ -118,14 +116,6 @@ impl Router {
             DiscoveryConfig, MetricsConfig, PolicyConfig as ConfigPolicyConfig, RoutingMode,
         };
 
-        if self.vllm_pd_disaggregation && self.lmdeploy_pd_disaggregation {
-            return Err(config::ConfigError::ValidationFailed {
-                reason:
-                    "vllm_pd_disaggregation and lmdeploy_pd_disaggregation are mutually exclusive"
-                        .to_string(),
-            });
-        }
-
         // Convert policy helper function
         let convert_policy = |policy: &PolicyType| -> ConfigPolicyConfig {
             match policy {
@@ -152,14 +142,6 @@ impl Router {
             // IGW mode - routing mode is not used in IGW, but we need to provide a placeholder
             RoutingMode::Regular {
                 worker_urls: vec![],
-            }
-        } else if self.vllm_pd_disaggregation {
-            RoutingMode::VllmPrefillDecode {
-                prefill_urls: self.prefill_urls.clone().unwrap_or_default(),
-                decode_urls: self.decode_urls.clone().unwrap_or_default(),
-                prefill_policy: self.prefill_policy.as_ref().map(convert_policy),
-                decode_policy: self.decode_policy.as_ref().map(convert_policy),
-                discovery_address: self.vllm_discovery_address.clone(),
             }
         } else if self.lmdeploy_pd_disaggregation {
             let migration_protocol = match self
@@ -346,8 +328,6 @@ impl Router {
         prometheus_host = None,
         request_timeout_secs = 1800,  // Add configurable request timeout
         request_id_headers = None,  // Custom request ID headers
-        vllm_pd_disaggregation = false,  // New flag for PD mode
-        vllm_discovery_address = None,
         prefill_urls = None,
         decode_urls = None,
         prefill_policy = None,
@@ -420,8 +400,6 @@ impl Router {
         prometheus_host: Option<String>,
         request_timeout_secs: u64,
         request_id_headers: Option<Vec<String>>,
-        vllm_pd_disaggregation: bool,
-        vllm_discovery_address: Option<String>,
         prefill_urls: Option<Vec<(String, Option<u16>)>>,
         decode_urls: Option<Vec<String>>,
         prefill_policy: Option<PolicyType>,
@@ -486,8 +464,6 @@ impl Router {
             prometheus_host,
             request_timeout_secs,
             request_id_headers,
-            vllm_pd_disaggregation,
-            vllm_discovery_address,
             prefill_urls,
             decode_urls,
             prefill_policy,
@@ -547,8 +523,7 @@ impl Router {
                 check_interval: std::time::Duration::from_secs(60),
                 port: self.service_discovery_port,
                 namespace: self.service_discovery_namespace.clone(),
-                // HTTP service discovery supports both PD router implementations.
-                pd_mode: self.vllm_pd_disaggregation || self.lmdeploy_pd_disaggregation,
+                pd_mode: self.lmdeploy_pd_disaggregation,
                 prefill_selector: self.prefill_selector.clone(),
                 decode_selector: self.decode_selector.clone(),
                 bootstrap_port_annotation: self.bootstrap_port_annotation.clone(),

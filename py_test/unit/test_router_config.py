@@ -36,7 +36,7 @@ class TestRouterConfigValidation:
         args = RouterArgs(
             host="127.0.0.1",
             port=30000,
-            vllm_pd_disaggregation=True,
+            lmdeploy_pd_disaggregation=True,
             prefill_urls=[
                 ("http://prefill1:8000", 9000),
                 ("http://prefill2:8000", None),
@@ -45,7 +45,7 @@ class TestRouterConfigValidation:
             policy="cache_aware",
         )
 
-        assert args.vllm_pd_disaggregation is True
+        assert args.lmdeploy_pd_disaggregation is True
         assert args.prefill_urls == [
             ("http://prefill1:8000", 9000),
             ("http://prefill2:8000", None),
@@ -53,25 +53,26 @@ class TestRouterConfigValidation:
         assert args.decode_urls == ["http://decode1:8001", "http://decode2:8001"]
         assert args.policy == "cache_aware"
 
-    def test_pd_config_without_urls_raises_error(self):
-        """Test that PD mode without URLs raises validation error."""
+    def test_pd_config_without_urls_allows_dynamic_registration(self):
+        """Test that PD mode without URLs allows worker registration."""
         args = RouterArgs(
-            vllm_pd_disaggregation=True,
+            lmdeploy_pd_disaggregation=True,
             prefill_urls=[],
             decode_urls=[],
             service_discovery=False,
         )
 
-        # This should raise an error when trying to launch
-        with pytest.raises(
-            ValueError, match="PD disaggregation mode requires --prefill"
-        ):
+        with patch("vllm_router.launch_router.Router") as router_mod:
+            mock_router_instance = MagicMock()
+            router_mod.from_args = MagicMock(return_value=mock_router_instance)
+
             launch_router(args)
+            router_mod.from_args.assert_called_once()
 
     def test_pd_config_with_service_discovery_allows_empty_urls(self):
         """Test that PD mode with service discovery allows empty URLs."""
         args = RouterArgs(
-            vllm_pd_disaggregation=True,
+            lmdeploy_pd_disaggregation=True,
             prefill_urls=[],
             decode_urls=[],
             service_discovery=True,
@@ -222,13 +223,13 @@ class TestRouterConfigValidation:
         """Test PD service discovery configuration validation."""
         # Valid PD service discovery config
         args = RouterArgs(
-            vllm_pd_disaggregation=True,
+            lmdeploy_pd_disaggregation=True,
             service_discovery=True,
             prefill_selector={"app": "prefill"},
             decode_selector={"app": "decode"},
             bootstrap_port_annotation="vllm.ai/bootstrap-port",
         )
-        assert args.vllm_pd_disaggregation is True
+        assert args.lmdeploy_pd_disaggregation is True
         assert args.service_discovery is True
         assert args.prefill_selector == {"app": "prefill"}
         assert args.decode_selector == {"app": "decode"}
@@ -279,7 +280,7 @@ class TestRouterConfigValidation:
         """Test policy consistency validation in PD mode."""
         # Test with both prefill and decode policies specified
         args = RouterArgs(
-            vllm_pd_disaggregation=True,
+            lmdeploy_pd_disaggregation=True,
             prefill_urls=[("http://prefill1:8000", None)],
             decode_urls=["http://decode1:8001"],
             policy="cache_aware",
@@ -301,7 +302,7 @@ class TestRouterConfigValidation:
         """Test policy fallback validation in PD mode."""
         # Test with only prefill policy specified
         args = RouterArgs(
-            vllm_pd_disaggregation=True,
+            lmdeploy_pd_disaggregation=True,
             prefill_urls=[("http://prefill1:8000", None)],
             decode_urls=["http://decode1:8001"],
             policy="cache_aware",
@@ -356,7 +357,7 @@ class TestRouterConfigValidation:
         assert args1.port == args2.port
         assert args1.policy == args2.policy
         assert args1.worker_urls == args2.worker_urls
-        assert args1.vllm_pd_disaggregation == args2.vllm_pd_disaggregation
+        assert args1.lmdeploy_pd_disaggregation == args2.lmdeploy_pd_disaggregation
 
     def test_config_serialization(self):
         """Test that configuration can be serialized/deserialized."""

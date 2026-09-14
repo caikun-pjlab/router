@@ -15,7 +15,7 @@ class RouterArgs:
 
     # PD-specific configuration
     mini_lb: bool = False
-    vllm_pd_disaggregation: bool = False  # Enable vLLM PD disaggregated mode
+    lmdeploy_pd_disaggregation: bool = False
     prefill_urls: List[tuple] = dataclasses.field(
         default_factory=list
     )  # List of (url, bootstrap_port)
@@ -49,8 +49,6 @@ class RouterArgs:
     prefill_selector: Dict[str, str] = dataclasses.field(default_factory=dict)
     decode_selector: Dict[str, str] = dataclasses.field(default_factory=dict)
     bootstrap_port_annotation: str = "vllm.ai/bootstrap-port"
-    # ZMQ service discovery address for vLLM PD mode
-    vllm_discovery_address: Optional[str] = None
     # KV connector for PD disaggregation (nixl pull-based or mooncake push-based)
     kv_connector: str = "nixl"
     # Prometheus configuration
@@ -177,9 +175,9 @@ class RouterArgs:
             help="Enable MiniLB",
         )
         parser.add_argument(
-            f"--{prefix}vllm-pd-disaggregation",
+            f"--{prefix}lmdeploy-pd-disaggregation",
             action="store_true",
-            help="Enable vLLM PD (Prefill-Decode) disaggregated mode",
+            help="Enable LMDeploy PD (Prefill-Decode) disaggregated mode",
         )
         parser.add_argument(
             f"--{prefix}prefill",
@@ -310,13 +308,6 @@ class RouterArgs:
             nargs="+",
             default={},
             help="Label selector for decode server pods in PD mode (format: key1=value1 key2=value2)",
-        )
-        parser.add_argument(
-            f"--{prefix}vllm-discovery-address",
-            type=str,
-            default=None,
-            help="ZMQ service discovery address for vLLM PD mode (e.g., '0.0.0.0:30001'). "
-            "Workers register their HTTP and ZMQ addresses here.",
         )
         parser.add_argument(
             f"--{prefix}kv-connector",
@@ -519,15 +510,7 @@ class RouterArgs:
 
     def _validate_router_args(self):
         # Validate configuration based on mode
-        if self.vllm_pd_disaggregation:
-            # Validate PD configuration - skip URL requirements if using service discovery
-            if not self.service_discovery and not self.vllm_discovery_address:
-                if not self.prefill_urls:
-                    raise ValueError("PD disaggregation mode requires --prefill")
-                if not self.decode_urls:
-                    raise ValueError("PD disaggregation mode requires --decode")
-
-            # Warn about policy usage in PD mode
+        if self.lmdeploy_pd_disaggregation:
             if self.prefill_policy and self.decode_policy and self.policy:
                 logger.warning(
                     "Both --prefill-policy and --decode-policy are specified. "
