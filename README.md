@@ -230,7 +230,7 @@ Automatic worker discovery and management in Kubernetes environments.
 ```bash
 vllm-router \
     --service-discovery \
-    --selector app=vllm-worker role=inference \
+    --selector app=inference-worker role=inference \
     --service-discovery-namespace default
 ```
 

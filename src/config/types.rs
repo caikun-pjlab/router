@@ -1048,7 +1048,7 @@ mod tests {
     #[test]
     fn test_discovery_config_with_selectors() {
         let mut selector = HashMap::new();
-        selector.insert("app".to_string(), "vllm".to_string());
+        selector.insert("app".to_string(), "inference".to_string());
         selector.insert("role".to_string(), "worker".to_string());
 
         let config = DiscoveryConfig {
@@ -1065,7 +1065,7 @@ mod tests {
         assert_eq!(config.namespace, Some("default".to_string()));
         assert_eq!(config.port, 9000);
         assert_eq!(config.selector.len(), 2);
-        assert_eq!(config.selector.get("app"), Some(&"vllm".to_string()));
+        assert_eq!(config.selector.get("app"), Some(&"inference".to_string()));
     }
 
     #[test]
@@ -1269,14 +1269,14 @@ mod tests {
             api_key_validation_urls: vec![],
             discovery: Some(DiscoveryConfig {
                 enabled: true,
-                namespace: Some("vllm".to_string()),
+                namespace: Some("router".to_string()),
                 ..Default::default()
             }),
             metrics: Some(MetricsConfig {
                 port: 9090,
                 host: "0.0.0.0".to_string(),
             }),
-            log_dir: Some("/var/log/vllm".to_string()),
+            log_dir: Some("/var/log/router".to_string()),
             log_level: Some("info".to_string()),
             request_id_headers: None,
             max_concurrent_requests: 64,
@@ -1307,7 +1307,7 @@ mod tests {
     #[test]
     fn test_full_regular_mode_config() {
         let mut selector = HashMap::new();
-        selector.insert("app".to_string(), "vllm".to_string());
+        selector.insert("app".to_string(), "inference".to_string());
 
         let config = RouterConfig {
             mode: RoutingMode::Regular {
@@ -1401,7 +1401,7 @@ mod tests {
                 port: 9999,
                 host: "::".to_string(), // IPv6 any
             }),
-            log_dir: Some("/opt/logs/vllm".to_string()),
+            log_dir: Some("/opt/logs/router".to_string()),
             log_level: Some("trace".to_string()),
             request_id_headers: None,
             max_concurrent_requests: 64,

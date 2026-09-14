@@ -521,10 +521,10 @@ mod tests {
         pod
     }
 
-    // Helper function to create a Pod with PD-specific labels and annotations
+    // Helper function to create a Pod with PD role labels
     fn create_pd_k8s_pod(name: &str, ip: &str, pod_type: &str) -> Pod {
         let mut labels = std::collections::BTreeMap::new();
-        labels.insert("app".to_string(), "vllm".to_string());
+        labels.insert("app".to_string(), "inference".to_string());
         labels.insert("component".to_string(), pod_type.to_string());
 
         Pod {
@@ -587,11 +587,11 @@ mod tests {
     // Helper to create a PD config for testing
     fn create_pd_config() -> ServiceDiscoveryConfig {
         let mut prefill_selector = HashMap::new();
-        prefill_selector.insert("app".to_string(), "vllm".to_string());
+        prefill_selector.insert("app".to_string(), "inference".to_string());
         prefill_selector.insert("component".to_string(), "prefill".to_string());
 
         let mut decode_selector = HashMap::new();
-        decode_selector.insert("app".to_string(), "vllm".to_string());
+        decode_selector.insert("app".to_string(), "inference".to_string());
         decode_selector.insert("component".to_string(), "decode".to_string());
 
         ServiceDiscoveryConfig {
@@ -626,7 +626,7 @@ mod tests {
         let mut regular_config = ServiceDiscoveryConfig::default();
         regular_config
             .selector
-            .insert("app".to_string(), "vllm".to_string());
+            .insert("app".to_string(), "inference".to_string());
         regular_config.pd_mode = false;
 
         let regular_pod = create_pd_k8s_pod("worker-pod", "10.0.0.4", "worker");
