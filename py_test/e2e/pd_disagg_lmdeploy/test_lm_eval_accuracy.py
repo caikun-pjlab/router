@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-P/D Disaggregation LM-Eval Accuracy Test for vLLM Router
+P/D Disaggregation LM-Eval Accuracy Test for LMDeploy Router
 
-This script validates that the router correctly routes requests through
-prefill and decode instances while maintaining model accuracy on standard benchmarks.
+This script measures LM-Eval accuracy through the LMDeploy Prefill/Decode
+router. It is optional and requires the router to be already running.
 
 Uses the LM Evaluation Harness (lm-eval) to measure accuracy on the gsm8k task.
 """
@@ -20,7 +20,8 @@ TASK = "gsm8k"
 FILTER = "exact_match,strict-match"
 RTOL = 0.03  # Relative tolerance for accuracy comparison
 
-# Model-specific expected values (from vLLM benchmarks)
+# Optional model-specific expected values. Set MODEL_NAME to the model ID
+# exposed by the LMDeploy servers; add a local baseline when one is known.
 EXPECTED_VALUES = {
     "meta-llama/Llama-3.2-1B-Instruct": 0.33,  # Lowered to accept >30% accuracy
     "Qwen/Qwen3-0.6B": 0.41,
@@ -31,8 +32,7 @@ EXPECTED_VALUES = {
 
 # Simple prompt for connectivity test
 SIMPLE_PROMPT = (
-    "The best part about working on vLLM is that I got to meet so many people across "
-    "various different organizations like UCB, Google, and Meta which means"
+    "LMDeploy serves models with an active open-source community, which means"
 )
 
 

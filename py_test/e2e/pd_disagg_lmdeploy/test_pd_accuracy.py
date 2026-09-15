@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-P/D Disaggregation Accuracy Test for vLLM Router
+P/D Disaggregation Accuracy Test for LMDeploy Router
 
 This script validates that the router correctly routes requests through
 prefill and decode instances with proper output accuracy.
@@ -307,7 +307,7 @@ def test_router_health(router_url: str) -> bool:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Test P/D disaggregation accuracy through vLLM router"
+        description="Test P/D disaggregation accuracy through LMDeploy router"
     )
     parser.add_argument(
         "--router-url",

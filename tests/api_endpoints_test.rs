@@ -456,7 +456,7 @@ mod model_info_tests {
             .unwrap();
         let body_json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert!(body_json.is_object());
-        // Check for actual vllm server fields
+        // Check for actual backend server fields
         assert!(body_json.get("version").is_some());
         assert!(body_json.get("model_path").is_some());
         assert!(body_json.get("port").is_some());
@@ -493,7 +493,7 @@ mod model_info_tests {
             .unwrap();
         let body_json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert!(body_json.is_object());
-        // Check for actual vllm model info fields
+        // Check for actual backend model info fields
         assert_eq!(
             body_json.get("model_path").and_then(|v| v.as_str()),
             Some("mock-model-path")

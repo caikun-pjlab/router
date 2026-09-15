@@ -450,7 +450,7 @@ class ConsistentHashTester:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Test consistent hash policy for vLLM router"
+        description="Test consistent hash policy for the router"
     )
     parser.add_argument(
         "--router-url",

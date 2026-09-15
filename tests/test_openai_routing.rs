@@ -180,7 +180,7 @@ async fn test_unsupported_endpoints() {
         .await
         .unwrap();
 
-    // Test generate endpoint (VLLM-specific, should not be supported)
+    // The OpenAI backend does not support the generate endpoint.
     let generate_request = GenerateRequest {
         prompt: None,
         text: Some("Hello world".to_string()),
