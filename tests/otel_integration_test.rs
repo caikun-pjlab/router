@@ -9,6 +9,11 @@ mod common;
 use axum::http::{Request, StatusCode};
 use common::mock_worker::{self, MockWorker, MockWorkerConfig};
 use common::test_app::create_test_app;
+use lmdeploy_router_rs::{
+    config::{PolicyConfig, RouterConfig, RoutingMode},
+    otel_trace,
+    routers::RouterFactory,
+};
 use opentelemetry::{global, propagation::TextMapCompositePropagator, trace::TracerProvider as _};
 use opentelemetry_sdk::{
     propagation::{BaggagePropagator, TraceContextPropagator},
@@ -17,11 +22,6 @@ use opentelemetry_sdk::{
 };
 use tower::ServiceExt;
 use tracing_subscriber::layer::SubscriberExt;
-use vllm_router_rs::{
-    config::{PolicyConfig, RouterConfig, RoutingMode},
-    otel_trace,
-    routers::RouterFactory,
-};
 
 /// Set up OTel with an in-memory exporter for one test section.
 fn setup_otel_harness() -> (

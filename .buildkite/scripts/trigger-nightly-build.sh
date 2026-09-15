@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # trigger-nightly-build.sh
-# Trigger a Buildkite nightly build for the vllm-router release pipeline
+# Trigger a Buildkite nightly build for the lmdeploy-router release pipeline
 # using the bk CLI. Sets NIGHTLY=1 environment variable for the build.
 #
 # Usage: ./trigger-nightly-build.sh [options]
@@ -28,7 +28,7 @@ usage() {
     cat <<EOF
 Usage: $(basename "$0") [options]
 
-Trigger a Buildkite nightly build for the vllm-router release pipeline.
+Trigger a Buildkite nightly build for the lmdeploy-router release pipeline.
 Sets NIGHTLY=1 environment variable to activate Docker image build and publish.
 
 SAFETY: Dry-run by default. Use --execute to actually trigger a build.

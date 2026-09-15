@@ -1,5 +1,5 @@
-# vLLM Router CI/CD Pipeline
-# This pipeline runs automated checks, builds, and tests for the vLLM Router project
+# LMDeploy Router CI/CD Pipeline
+# This pipeline runs automated checks, builds, and tests for the LMDeploy Router project
 
 env:
   RUST_IMAGE: "rust:1.95.0-bullseye"
@@ -89,7 +89,7 @@ steps:
                   apt-get update && apt-get install -y pkg-config libssl-dev protobuf-compiler
                   cargo build --release
         artifact_paths:
-          - "target/release/vllm-router"
+          - "target/release/lmdeploy-router"
         agents:
           queue: "cpu_queue_premerge"
 
@@ -182,7 +182,7 @@ steps:
                   pip3 install -U pip setuptools wheel setuptools-rust
                   pip3 install -e .[dev]
                   pip3 install pytest pytest-cov pytest-asyncio
-                  pytest py_test/ -v --ignore=py_test/e2e --cov=vllm_router --cov-report=xml --cov-report=term
+                  pytest py_test/ -v --ignore=py_test/e2e --cov=lmdeploy_router --cov-report=xml --cov-report=term
         artifact_paths:
           - "coverage.xml"
         agents:
@@ -287,8 +287,8 @@ steps:
   # ============================================================================
   - label: ":docker: Build Docker Image"
     command: |
-      docker build -f Dockerfile.router -t vllm-router:${BUILDKITE_COMMIT} .
-      docker tag vllm-router:${BUILDKITE_COMMIT} vllm-router:latest
+      docker build -f Dockerfile.router -t lmdeploy-router:${BUILDKITE_COMMIT} .
+      docker tag lmdeploy-router:${BUILDKITE_COMMIT} lmdeploy-router:latest
     agents:
       queue: "cpu_queue_premerge"
     depends_on: "build"

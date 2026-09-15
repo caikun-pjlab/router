@@ -1,12 +1,18 @@
 from typing import Optional
 
-from vllm_router.router_args import RouterArgs
-from vllm_router_rs import PolicyType
-from vllm_router_rs import Router as _Router
+from lmdeploy_router.router_args import RouterArgs
+try:
+    from lmdeploy_router_rs import PolicyType, Router as _Router
+except ImportError as exc:  # No-Rust development mode
+    PolicyType = None
+    _Router = None
+    _ROUTER_IMPORT_ERROR = exc
 
 
 def policy_from_str(policy_str: Optional[str]) -> PolicyType:
     """Convert policy string to PolicyType enum."""
+    if PolicyType is None:
+        raise _ROUTER_IMPORT_ERROR
     if policy_str is None:
         return None
     policy_map = {

@@ -1,12 +1,12 @@
 //! Integration tests for PolicyRegistry with RouterManager
 
+use lmdeploy_router_rs::config::{PolicyConfig, RouterConfig};
+use lmdeploy_router_rs::core::WorkerRegistry;
+use lmdeploy_router_rs::policies::PolicyRegistry;
+use lmdeploy_router_rs::protocols::worker_spec::WorkerConfigRequest;
+use lmdeploy_router_rs::routers::router_manager::RouterManager;
 use std::collections::HashMap;
 use std::sync::Arc;
-use vllm_router_rs::config::{PolicyConfig, RouterConfig};
-use vllm_router_rs::core::WorkerRegistry;
-use vllm_router_rs::policies::PolicyRegistry;
-use vllm_router_rs::protocols::worker_spec::WorkerConfigRequest;
-use vllm_router_rs::routers::router_manager::RouterManager;
 
 #[tokio::test]
 async fn test_policy_registry_with_router_manager() {
@@ -94,8 +94,8 @@ async fn test_policy_registry_with_router_manager() {
 
 #[test]
 fn test_policy_registry_cleanup() {
-    use vllm_router_rs::config::PolicyConfig;
-    use vllm_router_rs::policies::PolicyRegistry;
+    use lmdeploy_router_rs::config::PolicyConfig;
+    use lmdeploy_router_rs::policies::PolicyRegistry;
 
     let registry = PolicyRegistry::new(PolicyConfig::RoundRobin);
 
@@ -123,8 +123,8 @@ fn test_policy_registry_cleanup() {
 
 #[test]
 fn test_policy_registry_multiple_models() {
-    use vllm_router_rs::config::PolicyConfig;
-    use vllm_router_rs::policies::PolicyRegistry;
+    use lmdeploy_router_rs::config::PolicyConfig;
+    use lmdeploy_router_rs::policies::PolicyRegistry;
 
     let registry = PolicyRegistry::new(PolicyConfig::RoundRobin);
 

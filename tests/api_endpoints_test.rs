@@ -6,15 +6,15 @@ use axum::{
     http::{header::CONTENT_TYPE, StatusCode},
 };
 use common::mock_worker::{HealthStatus, MockWorker, MockWorkerConfig, WorkerType};
+use lmdeploy_router_rs::config::{
+    CircuitBreakerConfig, ConnectionMode, LMDeployMigrationProtocol, PolicyConfig, RetryConfig,
+    RouterConfig, RoutingMode,
+};
+use lmdeploy_router_rs::routers::{RouterFactory, RouterTrait};
 use reqwest::Client;
 use serde_json::json;
 use std::sync::Arc;
 use tower::ServiceExt;
-use vllm_router_rs::config::{
-    CircuitBreakerConfig, ConnectionMode, LMDeployMigrationProtocol, PolicyConfig, RetryConfig,
-    RouterConfig, RoutingMode,
-};
-use vllm_router_rs::routers::{RouterFactory, RouterTrait};
 
 /// Test context that manages mock workers
 struct TestContext {
@@ -53,13 +53,13 @@ impl TestContext {
             circuit_breaker: CircuitBreakerConfig::default(),
             disable_retries: false,
             disable_circuit_breaker: false,
-            health_check: vllm_router_rs::config::HealthCheckConfig::default(),
+            health_check: lmdeploy_router_rs::config::HealthCheckConfig::default(),
             enable_igw: false,
             connection_mode: ConnectionMode::Http,
-            history_backend: vllm_router_rs::config::HistoryBackend::Memory,
+            history_backend: lmdeploy_router_rs::config::HistoryBackend::Memory,
             enable_profiling: false,
             profile_timeout_secs: 30,
-            kv_connector: vllm_router_rs::config::KvConnector::Nixl,
+            kv_connector: lmdeploy_router_rs::config::KvConnector::Nixl,
         };
 
         Self::new_with_config(config, worker_configs).await
@@ -1384,13 +1384,13 @@ mod error_tests {
             circuit_breaker: CircuitBreakerConfig::default(),
             disable_retries: false,
             disable_circuit_breaker: false,
-            health_check: vllm_router_rs::config::HealthCheckConfig::default(),
+            health_check: lmdeploy_router_rs::config::HealthCheckConfig::default(),
             enable_igw: false,
             connection_mode: ConnectionMode::Http,
-            history_backend: vllm_router_rs::config::HistoryBackend::Memory,
+            history_backend: lmdeploy_router_rs::config::HistoryBackend::Memory,
             enable_profiling: false,
             profile_timeout_secs: 30,
-            kv_connector: vllm_router_rs::config::KvConnector::Nixl,
+            kv_connector: lmdeploy_router_rs::config::KvConnector::Nixl,
         };
 
         let ctx = TestContext::new_with_config(
@@ -1740,13 +1740,13 @@ mod pd_mode_tests {
             circuit_breaker: CircuitBreakerConfig::default(),
             disable_retries: false,
             disable_circuit_breaker: false,
-            health_check: vllm_router_rs::config::HealthCheckConfig::default(),
+            health_check: lmdeploy_router_rs::config::HealthCheckConfig::default(),
             enable_igw: false,
             connection_mode: ConnectionMode::Http,
-            history_backend: vllm_router_rs::config::HistoryBackend::Memory,
+            history_backend: lmdeploy_router_rs::config::HistoryBackend::Memory,
             enable_profiling: false,
             profile_timeout_secs: 30,
-            kv_connector: vllm_router_rs::config::KvConnector::Nixl,
+            kv_connector: lmdeploy_router_rs::config::KvConnector::Nixl,
         };
 
         // Create app context
@@ -1904,13 +1904,13 @@ mod request_id_tests {
             circuit_breaker: CircuitBreakerConfig::default(),
             disable_retries: false,
             disable_circuit_breaker: false,
-            health_check: vllm_router_rs::config::HealthCheckConfig::default(),
+            health_check: lmdeploy_router_rs::config::HealthCheckConfig::default(),
             enable_igw: false,
             connection_mode: ConnectionMode::Http,
-            history_backend: vllm_router_rs::config::HistoryBackend::Memory,
+            history_backend: lmdeploy_router_rs::config::HistoryBackend::Memory,
             enable_profiling: false,
             profile_timeout_secs: 30,
-            kv_connector: vllm_router_rs::config::KvConnector::Nixl,
+            kv_connector: lmdeploy_router_rs::config::KvConnector::Nixl,
         };
 
         let ctx = TestContext::new_with_config(

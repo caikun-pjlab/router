@@ -1,9 +1,9 @@
 [run]
-source = py_src/vllm_router
+source = py_src/lmdeploy_router
 omit =
-    py_src/vllm_router/mini_lb.py
+    py_src/lmdeploy_router/mini_lb.py
 
 [report]
 fail_under = 80
 omit =
-    py_src/vllm_router/mini_lb.py
+    py_src/lmdeploy_router/mini_lb.py

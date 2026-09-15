@@ -558,7 +558,7 @@ impl Router {
 
 #[cfg(feature = "python")]
 #[pymodule]
-fn vllm_router_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn lmdeploy_router_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PolicyType>()?;
     m.add_class::<Router>()?;
     Ok(())

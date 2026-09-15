@@ -1,5 +1,5 @@
 """
-Unit tests for startup sequence logic in vllm_router.
+Unit tests for startup sequence logic in lmdeploy_router.
 
 These tests focus on testing the startup sequence logic in isolation,
 including router initialization, configuration validation, and startup flow.
@@ -9,9 +9,9 @@ import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
-from vllm_router.launch_router import RouterArgs, launch_router
-from vllm_router.router import policy_from_str
-from vllm_router_rs import PolicyType
+from lmdeploy_router.launch_router import RouterArgs, launch_router
+from lmdeploy_router.router import policy_from_str
+from lmdeploy_router_rs import PolicyType
 
 
 # Local helper mirroring the router logger setup used in production
@@ -110,7 +110,7 @@ class TestRouterInitialization:
             policy="cache_aware",
         )
 
-        with patch("vllm_router.launch_router.Router") as router_mod:
+        with patch("lmdeploy_router.launch_router.Router") as router_mod:
             captured_args = {}
 
             mock_router_instance = MagicMock()
@@ -152,7 +152,7 @@ class TestRouterInitialization:
             policy="power_of_two",
         )
 
-        with patch("vllm_router.launch_router.Router") as router_mod:
+        with patch("lmdeploy_router.launch_router.Router") as router_mod:
             captured_args = {}
             mock_router_instance = MagicMock()
 
@@ -192,7 +192,7 @@ class TestRouterInitialization:
             service_discovery_namespace="default",
         )
 
-        with patch("vllm_router.launch_router.Router") as router_mod:
+        with patch("lmdeploy_router.launch_router.Router") as router_mod:
             captured_args = {}
             mock_router_instance = MagicMock()
 
@@ -234,7 +234,7 @@ class TestRouterInitialization:
             disable_retries=False,
         )
 
-        with patch("vllm_router.launch_router.Router") as router_mod:
+        with patch("lmdeploy_router.launch_router.Router") as router_mod:
             captured_args = {}
             mock_router_instance = MagicMock()
 
@@ -279,7 +279,7 @@ class TestRouterInitialization:
             disable_circuit_breaker=False,
         )
 
-        with patch("vllm_router.launch_router.Router") as router_mod:
+        with patch("lmdeploy_router.launch_router.Router") as router_mod:
             captured_args = {}
             mock_router_instance = MagicMock()
 
@@ -321,7 +321,7 @@ class TestRouterInitialization:
             rate_limit_tokens_per_second=100,
         )
 
-        with patch("vllm_router.launch_router.Router") as router_mod:
+        with patch("lmdeploy_router.launch_router.Router") as router_mod:
             captured_args = {}
             mock_router_instance = MagicMock()
 
@@ -362,7 +362,7 @@ class TestRouterInitialization:
             health_check_endpoint="/healthz",
         )
 
-        with patch("vllm_router.launch_router.Router") as router_mod:
+        with patch("lmdeploy_router.launch_router.Router") as router_mod:
             captured_args = {}
             mock_router_instance = MagicMock()
 
@@ -399,7 +399,7 @@ class TestRouterInitialization:
         """Test router initialization with Prometheus configuration."""
         args = RouterArgs(prometheus_port=29000, prometheus_host="127.0.0.1")
 
-        with patch("vllm_router.launch_router.Router") as router_mod:
+        with patch("lmdeploy_router.launch_router.Router") as router_mod:
             captured_args = {}
             mock_router_instance = MagicMock()
 
@@ -432,7 +432,7 @@ class TestRouterInitialization:
             cors_allowed_origins=["http://localhost:3000", "https://example.com"]
         )
 
-        with patch("vllm_router.launch_router.Router") as router_mod:
+        with patch("lmdeploy_router.launch_router.Router") as router_mod:
             captured_args = {}
             mock_router_instance = MagicMock()
 
@@ -475,7 +475,7 @@ class TestStartupValidation:
             service_discovery=False,
         )
 
-        with patch("vllm_router.launch_router.Router") as router_mod:
+        with patch("lmdeploy_router.launch_router.Router") as router_mod:
             mock_router_instance = MagicMock()
             router_mod.from_args = MagicMock(return_value=mock_router_instance)
 
@@ -492,7 +492,7 @@ class TestStartupValidation:
         )
 
         # Should not raise validation error
-        with patch("vllm_router.launch_router.Router") as router_mod:
+        with patch("lmdeploy_router.launch_router.Router") as router_mod:
             mock_router_instance = MagicMock()
 
             router_mod.from_args = MagicMock(return_value=mock_router_instance)
@@ -513,12 +513,12 @@ class TestStartupValidation:
             decode_policy="round_robin",
         )
 
-        with patch("vllm_router.launch_router.Router") as router_mod:
+        with patch("lmdeploy_router.launch_router.Router") as router_mod:
             mock_router_instance = MagicMock()
             router_mod.from_args = MagicMock(return_value=mock_router_instance)
 
             # The policy messages are emitted by router_args logger
-            with patch("vllm_router.router_args.logger") as mock_logger:
+            with patch("lmdeploy_router.router_args.logger") as mock_logger:
                 launch_router(args)
 
                 # Should log warning about policy usage
@@ -544,12 +544,12 @@ class TestStartupValidation:
             decode_policy=None,
         )
 
-        with patch("vllm_router.launch_router.Router") as router_mod:
+        with patch("lmdeploy_router.launch_router.Router") as router_mod:
             mock_router_instance = MagicMock()
             router_mod.from_args = MagicMock(return_value=mock_router_instance)
 
             # The policy messages are emitted by router_args logger
-            with patch("vllm_router.router_args.logger") as mock_logger:
+            with patch("lmdeploy_router.router_args.logger") as mock_logger:
                 launch_router(args)
 
                 # Should log info about policy usage
@@ -572,12 +572,12 @@ class TestStartupValidation:
             decode_policy="round_robin",
         )
 
-        with patch("vllm_router.launch_router.Router") as router_mod:
+        with patch("lmdeploy_router.launch_router.Router") as router_mod:
             mock_router_instance = MagicMock()
             router_mod.from_args = MagicMock(return_value=mock_router_instance)
 
             # The policy messages are emitted by router_args logger
-            with patch("vllm_router.router_args.logger") as mock_logger:
+            with patch("lmdeploy_router.router_args.logger") as mock_logger:
                 launch_router(args)
 
                 # Should log info about policy usage
@@ -599,13 +599,13 @@ class TestStartupErrorHandling:
             host="127.0.0.1", port=30000, worker_urls=["http://worker1:8000"]
         )
 
-        with patch("vllm_router.launch_router.Router") as router_mod:
+        with patch("lmdeploy_router.launch_router.Router") as router_mod:
             # Simulate router creation failure in from_args
             router_mod.from_args = MagicMock(
                 side_effect=Exception("Router creation failed")
             )
 
-            with patch("vllm_router.launch_router.logger") as mock_logger:
+            with patch("lmdeploy_router.launch_router.logger") as mock_logger:
                 with pytest.raises(Exception, match="Router creation failed"):
                     launch_router(args)
 
@@ -620,14 +620,14 @@ class TestStartupErrorHandling:
             host="127.0.0.1", port=30000, worker_urls=["http://worker1:8000"]
         )
 
-        with patch("vllm_router.launch_router.Router") as router_mod:
+        with patch("lmdeploy_router.launch_router.Router") as router_mod:
             mock_router_instance = MagicMock()
             router_mod.from_args = MagicMock(return_value=mock_router_instance)
 
             # Simulate router start failure
             mock_router_instance.start.side_effect = Exception("Router start failed")
 
-            with patch("vllm_router.launch_router.logger") as mock_logger:
+            with patch("lmdeploy_router.launch_router.logger") as mock_logger:
                 with pytest.raises(Exception, match="Router start failed"):
                     launch_router(args)
 
@@ -652,7 +652,7 @@ class TestStartupFlow:
             balance_rel_threshold=1.5,
         )
 
-        with patch("vllm_router.launch_router.Router") as router_mod:
+        with patch("lmdeploy_router.launch_router.Router") as router_mod:
             mock_router_instance = MagicMock()
             router_mod.from_args = MagicMock(return_value=mock_router_instance)
 
@@ -676,11 +676,11 @@ class TestStartupFlow:
             decode_policy="round_robin",
         )
 
-        with patch("vllm_router.launch_router.Router") as router_mod:
+        with patch("lmdeploy_router.launch_router.Router") as router_mod:
             mock_router_instance = MagicMock()
             router_mod.from_args = MagicMock(return_value=mock_router_instance)
 
-            with patch("vllm_router.router_args.logger") as mock_logger:
+            with patch("lmdeploy_router.router_args.logger") as mock_logger:
                 launch_router(args)
 
                 # Verify complete flow
@@ -729,7 +729,7 @@ class TestStartupFlow:
             health_check_endpoint="/healthz",
         )
 
-        with patch("vllm_router.launch_router.Router") as router_mod:
+        with patch("lmdeploy_router.launch_router.Router") as router_mod:
             captured_args = {}
             mock_router_instance = MagicMock()
 

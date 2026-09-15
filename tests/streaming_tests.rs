@@ -2,11 +2,11 @@ mod common;
 
 use common::mock_worker::{HealthStatus, MockWorker, MockWorkerConfig, WorkerType};
 use futures_util::StreamExt;
+use lmdeploy_router_rs::config::{RouterConfig, RoutingMode};
+use lmdeploy_router_rs::routers::{RouterFactory, RouterTrait};
 use reqwest::Client;
 use serde_json::json;
 use std::sync::Arc;
-use vllm_router_rs::config::{RouterConfig, RoutingMode};
-use vllm_router_rs::routers::{RouterFactory, RouterTrait};
 
 /// Test context that manages mock workers
 struct TestContext {

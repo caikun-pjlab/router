@@ -20,9 +20,9 @@ pub struct LoggingConfig {
     pub log_dir: Option<String>,
     /// Whether to colorize logs when output is a terminal (default: true)
     pub colorize: bool,
-    /// Log file name to use if log_dir is specified (default: "vllm-router")
+    /// Log file name to use if log_dir is specified (default: "lmdeploy-router")
     pub log_file_name: String,
-    /// Custom log targets to filter (default: "vllm_router_rs")
+    /// Custom log targets to filter (default: "lmdeploy_router_rs")
     pub log_targets: Option<Vec<String>>,
 }
 
@@ -33,8 +33,8 @@ impl Default for LoggingConfig {
             json_format: false,
             log_dir: None,
             colorize: true,
-            log_file_name: "vllm-router".to_string(),
-            log_targets: Some(vec!["vllm_router_rs".to_string()]),
+            log_file_name: "lmdeploy-router".to_string(),
+            log_targets: Some(vec!["lmdeploy_router_rs".to_string()]),
         }
     }
 }
@@ -89,7 +89,7 @@ pub fn init_logging(config: LoggingConfig, otel_layer_config: Option<TraceConfig
                 })
                 .collect::<String>()
         } else {
-            format!("vllm_router_rs={}", level_filter)
+            format!("lmdeploy_router_rs={}", level_filter)
         };
 
         EnvFilter::new(filter_string)

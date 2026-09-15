@@ -3,12 +3,12 @@ mod consistent_hash_policy_tests {
     use std::collections::HashMap;
     use std::sync::Arc;
 
-    use vllm_router_rs::core::BasicWorker;
-    use vllm_router_rs::core::Worker;
-    use vllm_router_rs::core::WorkerType;
-    use vllm_router_rs::policies::ConsistentHashPolicy;
-    use vllm_router_rs::policies::LoadBalancingPolicy;
-    use vllm_router_rs::policies::RequestHeaders;
+    use lmdeploy_router_rs::core::BasicWorker;
+    use lmdeploy_router_rs::core::Worker;
+    use lmdeploy_router_rs::core::WorkerType;
+    use lmdeploy_router_rs::policies::ConsistentHashPolicy;
+    use lmdeploy_router_rs::policies::LoadBalancingPolicy;
+    use lmdeploy_router_rs::policies::RequestHeaders;
 
     /// Helper function to create test workers
     fn create_test_workers() -> Vec<Arc<dyn Worker>> {

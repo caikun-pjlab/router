@@ -11,15 +11,15 @@ use common::{
     mock_worker::{MockWorker, MockWorkerConfig},
     test_app::create_test_app_with_tracing,
 };
-use reqwest::Client;
-use tower::ServiceExt;
-use tower_http::trace::MakeSpan;
-use vllm_router_rs::{
+use lmdeploy_router_rs::{
     config::{PolicyConfig, RouterConfig, RoutingMode},
     middleware::RequestSpan,
     otel_trace,
     routers::{header_utils, RouterFactory},
 };
+use reqwest::Client;
+use tower::ServiceExt;
+use tower_http::trace::MakeSpan;
 
 fn test_router_config(worker_url: &str) -> RouterConfig {
     RouterConfig {

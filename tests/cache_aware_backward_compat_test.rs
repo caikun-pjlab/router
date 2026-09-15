@@ -1,7 +1,7 @@
+use lmdeploy_router_rs::core::{BasicWorker, Worker, WorkerType};
+use lmdeploy_router_rs::policies::{CacheAwareConfig, CacheAwarePolicy, LoadBalancingPolicy};
 use std::collections::HashMap;
 use std::sync::Arc;
-use vllm_router_rs::core::{BasicWorker, Worker, WorkerType};
-use vllm_router_rs::policies::{CacheAwareConfig, CacheAwarePolicy, LoadBalancingPolicy};
 
 #[test]
 fn test_backward_compatibility_with_empty_model_id() {

@@ -1,10 +1,10 @@
 #[cfg(test)]
 mod test_pd_routing {
-    use vllm_router_rs::config::{
+    use lmdeploy_router_rs::config::{
         CircuitBreakerConfig, ConnectionMode, LMDeployMigrationProtocol, PolicyConfig, RetryConfig,
         RouterConfig, RoutingMode,
     };
-    use vllm_router_rs::routers::RouterFactory;
+    use lmdeploy_router_rs::routers::RouterFactory;
 
     // ========================================================================
     // Phase 1: Basic PD Components and Router Creation
@@ -12,7 +12,7 @@ mod test_pd_routing {
 
     #[test]
     fn test_worker_types() {
-        use vllm_router_rs::core::{WorkerFactory, WorkerType};
+        use lmdeploy_router_rs::core::{WorkerFactory, WorkerType};
 
         // Test worker creation for prefill servers
         let prefill_worker = WorkerFactory::create_prefill("http://prefill:8080".to_string());
@@ -122,18 +122,18 @@ mod test_pd_routing {
                 circuit_breaker: CircuitBreakerConfig::default(),
                 disable_retries: false,
                 disable_circuit_breaker: false,
-                health_check: vllm_router_rs::config::HealthCheckConfig::default(),
+                health_check: lmdeploy_router_rs::config::HealthCheckConfig::default(),
                 enable_igw: false,
                 rate_limit_tokens_per_second: None,
                 connection_mode: ConnectionMode::Http,
-                history_backend: vllm_router_rs::config::HistoryBackend::Memory,
+                history_backend: lmdeploy_router_rs::config::HistoryBackend::Memory,
                 enable_profiling: false,
                 profile_timeout_secs: 30,
-                kv_connector: vllm_router_rs::config::KvConnector::Nixl,
+                kv_connector: lmdeploy_router_rs::config::KvConnector::Nixl,
             };
 
             // Router creation will fail due to health checks, but config should be valid
-            let app_context = vllm_router_rs::server::AppContext::new(
+            let app_context = lmdeploy_router_rs::server::AppContext::new(
                 config.clone(),
                 reqwest::Client::new(),
                 64,

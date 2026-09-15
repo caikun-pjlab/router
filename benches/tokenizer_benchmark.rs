@@ -2,15 +2,15 @@
 //! Each test adds a row to the final summary table
 
 use criterion::{black_box, criterion_group, BenchmarkId, Criterion, Throughput};
+use lmdeploy_router_rs::tokenizer::{
+    huggingface::HuggingFaceTokenizer, sequence::Sequence, stop::*, stream::DecodeStream, traits::*,
+};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
-use vllm_router_rs::tokenizer::{
-    huggingface::HuggingFaceTokenizer, sequence::Sequence, stop::*, stream::DecodeStream, traits::*,
-};
 
 // Include the common test utilities
 #[path = "../tests/common/mod.rs"]

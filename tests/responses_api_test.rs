@@ -1,6 +1,6 @@
 // Integration test for Responses API
 
-use vllm_router_rs::protocols::spec::{
+use lmdeploy_router_rs::protocols::spec::{
     GenerationRequest, ReasoningEffort, ResponseInput, ResponseReasoningParam, ResponseStatus,
     ResponseTool, ResponseToolType, ResponsesRequest, ResponsesResponse, ServiceTier, ToolChoice,
     ToolChoiceValue, Truncation, UsageInfo,

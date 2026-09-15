@@ -14,7 +14,7 @@ import orjson
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import ORJSONResponse, Response, StreamingResponse
-from vllm_router.router_args import RouterArgs
+from lmdeploy_router.router_args import RouterArgs
 
 logger = logging.getLogger(__name__)
 

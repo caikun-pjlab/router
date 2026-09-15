@@ -175,7 +175,7 @@ pub fn prepare_otel(trace_config: &TraceConfig) -> Result<PreparedOtel> {
         .build();
 
     let resource_attrs = vec![
-        KeyValue::new("service.name", "vllm-router"),
+        KeyValue::new("service.name", "lmdeploy-router"),
         KeyValue::new("service.version", env!("CARGO_PKG_VERSION")),
         KeyValue::new("service.instance.id", service_instance_id()),
     ];
@@ -187,7 +187,7 @@ pub fn prepare_otel(trace_config: &TraceConfig) -> Result<PreparedOtel> {
         .with_resource(resource)
         .build();
 
-    let tracer = provider.tracer("vllm-router");
+    let tracer = provider.tracer("lmdeploy-router");
 
     Ok(PreparedOtel {
         provider,

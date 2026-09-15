@@ -5,8 +5,8 @@ mod tests {
 
     #[test]
     fn test_load_chat_template_from_file() {
-        use vllm_router_rs::tokenizer::chat_template::ChatMessage;
-        use vllm_router_rs::tokenizer::huggingface::HuggingFaceTokenizer;
+        use lmdeploy_router_rs::tokenizer::chat_template::ChatMessage;
+        use lmdeploy_router_rs::tokenizer::huggingface::HuggingFaceTokenizer;
 
         // Create temporary directory
         let temp_dir = TempDir::new().unwrap();
@@ -73,8 +73,8 @@ mod tests {
 
     #[test]
     fn test_override_existing_template() {
-        use vllm_router_rs::tokenizer::chat_template::ChatMessage;
-        use vllm_router_rs::tokenizer::huggingface::HuggingFaceTokenizer;
+        use lmdeploy_router_rs::tokenizer::chat_template::ChatMessage;
+        use lmdeploy_router_rs::tokenizer::huggingface::HuggingFaceTokenizer;
 
         // Create temporary directory
         let temp_dir = TempDir::new().unwrap();
@@ -135,8 +135,8 @@ mod tests {
 
     #[test]
     fn test_set_chat_template_after_creation() {
-        use vllm_router_rs::tokenizer::chat_template::ChatMessage;
-        use vllm_router_rs::tokenizer::huggingface::HuggingFaceTokenizer;
+        use lmdeploy_router_rs::tokenizer::chat_template::ChatMessage;
+        use lmdeploy_router_rs::tokenizer::huggingface::HuggingFaceTokenizer;
 
         // Create temporary directory and tokenizer file
         let temp_dir = TempDir::new().unwrap();

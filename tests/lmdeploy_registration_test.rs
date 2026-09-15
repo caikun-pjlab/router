@@ -3,15 +3,15 @@ use axum::{
     http::{Request, StatusCode},
     Router,
 };
-use reqwest::Client;
-use serde_json::{json, Value};
-use std::sync::Arc;
-use tower::ServiceExt;
-use vllm_router_rs::{
+use lmdeploy_router_rs::{
     config::{LMDeployMigrationProtocol, RouterConfig, RoutingMode},
     routers::{http::lmdeploy_pd_router::LMDeployPDRouter, http::router::Router as HttpRouter},
     server::{build_app_with_request_tracing, AppContext, AppState},
 };
+use reqwest::Client;
+use serde_json::{json, Value};
+use std::sync::Arc;
+use tower::ServiceExt;
 
 async fn regular_app() -> (Router, Arc<AppContext>) {
     let mut config = RouterConfig::default();

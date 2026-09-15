@@ -1,5 +1,5 @@
 //! Tests that unknown/extra fields in ChatCompletionRequest are preserved through serde roundtrip.
-use vllm_router_rs::protocols::spec::ChatCompletionRequest;
+use lmdeploy_router_rs::protocols::spec::ChatCompletionRequest;
 
 #[test]
 fn test_extra_fields_preserved_on_deserialize() {

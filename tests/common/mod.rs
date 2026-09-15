@@ -6,11 +6,11 @@ pub mod mock_openai_server;
 pub mod mock_worker;
 pub mod test_app;
 
+use lmdeploy_router_rs::config::RouterConfig;
+use lmdeploy_router_rs::server::AppContext;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, OnceLock};
-use vllm_router_rs::config::RouterConfig;
-use vllm_router_rs::server::AppContext;
 
 /// Helper function to create AppContext for tests
 pub fn create_test_context(config: RouterConfig) -> Arc<AppContext> {

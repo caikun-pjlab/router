@@ -7,10 +7,7 @@ use axum::{
     routing::post,
     Router,
 };
-use serde_json::json;
-use std::sync::Arc;
-use tower::ServiceExt;
-use vllm_router_rs::{
+use lmdeploy_router_rs::{
     config::{RouterConfig, RoutingMode},
     protocols::spec::{
         ChatCompletionRequest, ChatMessage, CompletionRequest, GenerateRequest, PromptInput,
@@ -18,6 +15,9 @@ use vllm_router_rs::{
     },
     routers::{openai_router::OpenAIRouter, RouterTrait},
 };
+use serde_json::json;
+use std::sync::Arc;
+use tower::ServiceExt;
 
 mod common;
 use common::mock_openai_server::MockOpenAIServer;
@@ -158,12 +158,14 @@ async fn test_router_factory_openai_mode() {
         worker_urls: vec!["https://api.openai.com".to_string()],
     };
 
-    let router_config =
-        RouterConfig::new(routing_mode, vllm_router_rs::config::PolicyConfig::Random);
+    let router_config = RouterConfig::new(
+        routing_mode,
+        lmdeploy_router_rs::config::PolicyConfig::Random,
+    );
 
     let app_context = common::create_test_context(router_config);
 
-    let router = vllm_router_rs::routers::RouterFactory::create_router(&app_context).await;
+    let router = lmdeploy_router_rs::routers::RouterFactory::create_router(&app_context).await;
     assert!(
         router.is_ok(),
         "Router factory should create OpenAI router successfully"
@@ -353,7 +355,7 @@ async fn test_openai_router_chat_streaming_with_mock() {
 #[tokio::test]
 async fn test_openai_router_circuit_breaker() {
     // Create router with circuit breaker config
-    let cb_config = vllm_router_rs::config::CircuitBreakerConfig {
+    let cb_config = lmdeploy_router_rs::config::CircuitBreakerConfig {
         failure_threshold: 2,
         success_threshold: 1,
         timeout_duration_secs: 1,
@@ -445,7 +447,7 @@ async fn test_openai_router_chat_with_reasoning_fields() {
     assert!(!chat_request.include_reasoning);
     assert!(matches!(
         chat_request.reasoning_effort,
-        Some(vllm_router_rs::protocols::spec::ReasoningEffort::Low)
+        Some(lmdeploy_router_rs::protocols::spec::ReasoningEffort::Low)
     ));
 
     // Route the request to mock server

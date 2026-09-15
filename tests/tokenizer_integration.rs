@@ -6,11 +6,11 @@
 mod common;
 use common::{ensure_tokenizer_cached, EXPECTED_HASHES, TEST_PROMPTS};
 
-use std::sync::Arc;
-use vllm_router_rs::tokenizer::{
+use lmdeploy_router_rs::tokenizer::{
     factory, huggingface::HuggingFaceTokenizer, sequence::Sequence, stop::*, stream::DecodeStream,
     traits::*,
 };
+use std::sync::Arc;
 
 const LONG_TEST_PROMPTS: [(&str, &str); 6] = [
     ("Tell me about the following text.", "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat."),
@@ -273,7 +273,7 @@ fn test_batch_encoding() {
 
 #[test]
 fn test_special_tokens() {
-    use vllm_router_rs::tokenizer::traits::Tokenizer as TokenizerTrait;
+    use lmdeploy_router_rs::tokenizer::traits::Tokenizer as TokenizerTrait;
 
     let tokenizer_path = ensure_tokenizer_cached();
     let tokenizer = HuggingFaceTokenizer::from_file(tokenizer_path.to_str().unwrap())

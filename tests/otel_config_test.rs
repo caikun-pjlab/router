@@ -1,13 +1,13 @@
 use axum::http::Request;
-use opentelemetry::trace::TracerProvider as _;
-use opentelemetry_sdk::{testing::trace::InMemorySpanExporter, trace::TracerProvider};
-use tower_http::trace::MakeSpan;
-use tracing_subscriber::layer::SubscriberExt;
-use vllm_router_rs::{
+use lmdeploy_router_rs::{
     config::TraceConfig,
     middleware::RequestSpan,
     otel_trace::{self, PreparedOtel},
 };
+use opentelemetry::trace::TracerProvider as _;
+use opentelemetry_sdk::{testing::trace::InMemorySpanExporter, trace::TracerProvider};
+use tower_http::trace::MakeSpan;
+use tracing_subscriber::layer::SubscriberExt;
 
 #[test]
 fn test_trace_config_controls() {

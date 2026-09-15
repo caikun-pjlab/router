@@ -38,7 +38,7 @@ class RouterManager:
         cmd = [
             "python3",
             "-m",
-            "vllm_router.launch_router",
+            "lmdeploy_router.launch_router",
             "--host",
             "127.0.0.1",
             "--port",

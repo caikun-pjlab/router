@@ -1,14 +1,14 @@
 use clap::{ArgAction, Parser, ValueEnum};
-use std::collections::HashMap;
-use vllm_router_rs::config::{
+use lmdeploy_router_rs::config::{
     CircuitBreakerConfig, ConfigResult, ConnectionMode, DiscoveryConfig, HealthCheckConfig,
     HistoryBackend, KvConnector, LMDeployMigrationProtocol, LMDeployRdmaConfig,
     LMDeployRdmaLinkType, MetricsConfig, PolicyConfig, RetryConfig, RouterConfig, RoutingMode,
     TraceConfig,
 };
-use vllm_router_rs::metrics::PrometheusConfig;
-use vllm_router_rs::server::{self, ServerConfig};
-use vllm_router_rs::service_discovery::ServiceDiscoveryConfig;
+use lmdeploy_router_rs::metrics::PrometheusConfig;
+use lmdeploy_router_rs::server::{self, ServerConfig};
+use lmdeploy_router_rs::service_discovery::ServiceDiscoveryConfig;
+use std::collections::HashMap;
 
 fn parse_prefill_args() -> Vec<String> {
     let args: Vec<String> = std::env::args().collect();
@@ -661,8 +661,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let result = server::startup(server_config).await;
         // Shut down OTel while the Tokio runtime is still alive so the
         // BatchSpanProcessor can flush its final batch.
-        if vllm_router_rs::otel_trace::is_otel_enabled() {
-            vllm_router_rs::otel_trace::shutdown_otel();
+        if lmdeploy_router_rs::otel_trace::is_otel_enabled() {
+            lmdeploy_router_rs::otel_trace::shutdown_otel();
         }
         result
     })?;

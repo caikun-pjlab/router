@@ -7,7 +7,7 @@ body:
 - type: markdown
   attributes:
     value: >
-      #### Before submitting an issue, please make sure the issue hasn't been already addressed by searching through [the existing and past issues](https://github.com/vllm-project/vllm-router/issues?q=is%3Aissue+sort%3Acreated-desc+).
+      #### Before submitting an issue, please make sure the issue hasn't been already addressed by searching through [the existing and past issues](https://github.com/vllm-project/lmdeploy-router/issues?q=is%3Aissue+sort%3Acreated-desc+).
 - type: markdown
   attributes:
     value: |
@@ -23,7 +23,7 @@ body:
     label: Your current environment
     description: |
       Please provide the following information about your environment:
-      - **vLLM Router version**: Run `vllm-router --version` or check `pyproject.toml`
+      - **LMDeploy Router version**: Run `lmdeploy-router --version` or check `pyproject.toml`
       - **Rust version**: Run `rustc --version`
       - **Python version**: Run `python --version`
       - **Operating System**: e.g., Ubuntu 22.04, macOS 14.0
@@ -34,7 +34,7 @@ body:
       <summary>Environment Information</summary>
 
       ```text
-      vLLM Router version:
+      LMDeploy Router version:
       Rust version:
       Python version:
       Operating System:
@@ -69,7 +69,7 @@ body:
 
       Example:
       ```bash
-      vllm-router \
+      lmdeploy-router \
           --worker-urls http://worker1:8000 http://worker2:8000 \
           --policy consistent_hash \
           --intra-node-data-parallel-size 8 \
@@ -107,7 +107,7 @@ body:
       **For debugging, enable verbose logging:**
       ```bash
       # Set log level to debug
-      vllm-router --log-level debug ...
+      lmdeploy-router --log-level debug ...
 
       # Or set environment variable
       export RUST_LOG=debug

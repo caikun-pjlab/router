@@ -1,5 +1,5 @@
 """
-Unit tests for validation logic in vllm_router.
+Unit tests for validation logic in lmdeploy_router.
 
 These tests focus on testing the validation logic in isolation,
 including parameter validation, URL validation, and configuration validation.
@@ -8,7 +8,7 @@ including parameter validation, URL validation, and configuration validation.
 from unittest.mock import MagicMock, patch
 
 import pytest
-from vllm_router.launch_router import RouterArgs, launch_router
+from lmdeploy_router.launch_router import RouterArgs, launch_router
 
 
 class TestURLValidation:
@@ -399,7 +399,7 @@ class TestLaunchValidation:
             service_discovery=False,
         )
 
-        with patch("vllm_router.launch_router.Router") as router_mod:
+        with patch("lmdeploy_router.launch_router.Router") as router_mod:
             mock_router_instance = MagicMock()
             router_mod.from_args = MagicMock(return_value=mock_router_instance)
 
@@ -416,7 +416,7 @@ class TestLaunchValidation:
         )
 
         # Should not raise validation error
-        with patch("vllm_router.launch_router.Router") as router_mod:
+        with patch("lmdeploy_router.launch_router.Router") as router_mod:
             mock_router_instance = MagicMock()
             router_mod.from_args = MagicMock(return_value=mock_router_instance)
 
@@ -430,7 +430,7 @@ class TestLaunchValidation:
         args = RouterArgs(worker_urls=[], service_discovery=False)
 
         # Should not raise validation error
-        with patch("vllm_router.launch_router.Router") as router_mod:
+        with patch("lmdeploy_router.launch_router.Router") as router_mod:
             mock_router_instance = MagicMock()
             router_mod.from_args = MagicMock(return_value=mock_router_instance)
 
@@ -449,7 +449,7 @@ class TestLaunchValidation:
         )
 
         # Should not raise validation error
-        with patch("vllm_router.launch_router.Router") as router_mod:
+        with patch("lmdeploy_router.launch_router.Router") as router_mod:
             mock_router_instance = MagicMock()
             router_mod.from_args = MagicMock(return_value=mock_router_instance)
 
@@ -468,7 +468,7 @@ class TestLaunchValidation:
         )
 
         # Should not raise validation error
-        with patch("vllm_router.launch_router.Router") as router_mod:
+        with patch("lmdeploy_router.launch_router.Router") as router_mod:
             mock_router_instance = MagicMock()
             router_mod.from_args = MagicMock(return_value=mock_router_instance)
 
@@ -486,7 +486,7 @@ class TestLaunchValidation:
         )
 
         # Should not raise validation error
-        with patch("vllm_router.launch_router.Router") as router_mod:
+        with patch("lmdeploy_router.launch_router.Router") as router_mod:
             mock_router_instance = MagicMock()
             router_mod.from_args = MagicMock(return_value=mock_router_instance)
 

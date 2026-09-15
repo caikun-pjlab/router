@@ -13,6 +13,7 @@
 //! global ENABLED flag.
 
 use axum::http::{HeaderMap, HeaderValue};
+use lmdeploy_router_rs::otel_trace;
 use opentelemetry::{
     global,
     propagation::TextMapCompositePropagator,
@@ -26,7 +27,6 @@ use opentelemetry_sdk::{
 use tracing::info_span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use tracing_subscriber::layer::SubscriberExt;
-use vllm_router_rs::otel_trace;
 
 /// Helper: set up a test OTel environment with in-memory exporter.
 fn setup_test_otel() -> (
@@ -146,8 +146,8 @@ fn test_otel_distributed_tracing() {
     // =====================================================================
     {
         use axum::http::Request;
+        use lmdeploy_router_rs::middleware::RequestSpan;
         use tower_http::trace::MakeSpan;
-        use vllm_router_rs::middleware::RequestSpan;
 
         let (exporter, provider, _guard) = setup_test_otel();
 

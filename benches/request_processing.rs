@@ -2,7 +2,7 @@ use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criteri
 use serde_json::{from_str, to_string, to_value, to_vec};
 use std::time::Instant;
 
-use vllm_router_rs::protocols::spec::{
+use lmdeploy_router_rs::protocols::spec::{
     ChatCompletionRequest, ChatMessage, CompletionRequest, GenerateParameters, GenerateRequest,
     PromptInput, SamplingParams, UserMessageContent,
 };
@@ -467,7 +467,7 @@ fn bench_full_round_trip(c: &mut Criterion) {
 fn benchmark_summary(c: &mut Criterion) {
     let group = c.benchmark_group("benchmark_summary");
 
-    println!("\nVLLM Router Performance Benchmark Suite");
+    println!("\nLMDeploy Router Performance Benchmark Suite");
     println!("=============================================");
 
     // Quick performance overview

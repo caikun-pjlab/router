@@ -3,12 +3,12 @@
 //
 // UPDATED: Removed deprecated ToPdRequest usage, now uses direct JSON serialization
 
-use serde_json::{from_str, to_string, to_value};
-use vllm_router_rs::core::{BasicWorker, WorkerType};
-use vllm_router_rs::protocols::spec::{
+use lmdeploy_router_rs::core::{BasicWorker, WorkerType};
+use lmdeploy_router_rs::protocols::spec::{
     ChatCompletionRequest, ChatMessage, CompletionRequest, GenerateParameters, GenerateRequest,
     PromptInput, SamplingParams, UserMessageContent,
 };
+use serde_json::{from_str, to_string, to_value};
 
 /// Create a default GenerateRequest for benchmarks with minimal fields set
 fn default_generate_request() -> GenerateRequest {
@@ -159,17 +159,19 @@ fn test_benchmark_request_creation() {
         presence_penalty: Some(0.0),
         frequency_penalty: Some(0.0),
         parallel_tool_calls: Some(true),
-        structured_outputs: Some(vllm_router_rs::protocols::spec::StructuredOutputsParams {
-            json: Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "name": {"type": "string"},
-                    "age": {"type": "integer"}
-                },
-                "required": ["name", "age"]
-            })),
-            ..Default::default()
-        }),
+        structured_outputs: Some(
+            lmdeploy_router_rs::protocols::spec::StructuredOutputsParams {
+                json: Some(serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "age": {"type": "integer"}
+                    },
+                    "required": ["name", "age"]
+                })),
+                ..Default::default()
+            },
+        ),
         ..default_chat_completion_request()
     };
 

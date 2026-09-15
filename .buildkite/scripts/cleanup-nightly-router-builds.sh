@@ -4,7 +4,7 @@ set -ex
 
 # Clean up old nightly builds from DockerHub, keeping only the last 14 builds
 # This script uses DockerHub API to list and delete old tags with specified prefix
-# Target repo: vllm/vllm-router
+# Target repo: vllm/lmdeploy-router
 # Usage: cleanup-nightly-router-builds.sh [TAG_PREFIX]
 # Example: cleanup-nightly-router-builds.sh "nightly-"
 
@@ -13,8 +13,8 @@ TAG_PREFIX="${1:-nightly-}"
 
 echo "Cleaning up tags with prefix: $TAG_PREFIX"
 
-# DockerHub API endpoint for vllm/vllm-router repository
-REPO_API_URL="https://hub.docker.com/v2/repositories/vllm/vllm-router/tags"
+# DockerHub API endpoint for vllm/lmdeploy-router repository
+REPO_API_URL="https://hub.docker.com/v2/repositories/vllm/lmdeploy-router/tags"
 
 # Get DockerHub credentials from environment
 if [ -z "$DOCKERHUB_TOKEN" ]; then
@@ -71,7 +71,7 @@ delete_tag() {
     local tag_name="$1"
     echo "Deleting tag: $tag_name"
 
-    local delete_url="https://hub.docker.com/v2/repositories/vllm/vllm-router/tags/$tag_name"
+    local delete_url="https://hub.docker.com/v2/repositories/vllm/lmdeploy-router/tags/$tag_name"
     set +x
     local response=$(curl -s -X DELETE -H "Authorization: Bearer $BEARER_TOKEN" "$delete_url")
     set -x

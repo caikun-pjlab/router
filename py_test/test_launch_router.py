@@ -23,7 +23,7 @@ def terminate_process(process: multiprocessing.Process, timeout: float = 1.0) ->
 
 def run_router(args):
     try:
-        from vllm_router.launch_router import launch_router
+        from lmdeploy_router.launch_router import launch_router
 
         router = launch_router(args)
         if router is None:
@@ -127,9 +127,9 @@ class TestLaunchRouter(unittest.TestCase):
         """Test basic PD router functionality without actually starting servers."""
         # This test just verifies the PD router can be created and configured
         # without actually starting it (which would require real prefill/decode servers)
-        from vllm_router import Router
-        from vllm_router.launch_router import RouterArgs
-        from vllm_router_rs import PolicyType
+        from lmdeploy_router import Router
+        from lmdeploy_router.launch_router import RouterArgs
+        from lmdeploy_router_rs import PolicyType
 
         # Test RouterArgs parsing for PD mode
         # Simulate the parsed args structure from argparse with action="append"
@@ -173,7 +173,7 @@ class TestLaunchRouter(unittest.TestCase):
 
     def test_policy_validation(self):
         """Test that policy validation works correctly for PD and regular modes."""
-        from vllm_router.launch_router import launch_router
+        from lmdeploy_router.launch_router import launch_router
 
         # Test 1: PowerOfTwo requires at least 2 workers
         args = self.create_router_args(
@@ -221,7 +221,7 @@ class TestLaunchRouter(unittest.TestCase):
         """Test PD service discovery CLI argument parsing."""
         import argparse
 
-        from vllm_router.launch_router import RouterArgs
+        from lmdeploy_router.launch_router import RouterArgs
 
         parser = argparse.ArgumentParser()
         RouterArgs.add_cli_args(parser)
@@ -264,7 +264,7 @@ class TestLaunchRouter(unittest.TestCase):
         """Test regular mode service discovery CLI argument parsing."""
         import argparse
 
-        from vllm_router.launch_router import RouterArgs
+        from lmdeploy_router.launch_router import RouterArgs
 
         parser = argparse.ArgumentParser()
         RouterArgs.add_cli_args(parser)
@@ -297,7 +297,7 @@ class TestLaunchRouter(unittest.TestCase):
         """Test that router accepts no worker URLs and defaults to empty list."""
         import argparse
 
-        from vllm_router.launch_router import RouterArgs
+        from lmdeploy_router.launch_router import RouterArgs
 
         parser = argparse.ArgumentParser()
         RouterArgs.add_cli_args(parser)

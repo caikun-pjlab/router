@@ -4,13 +4,13 @@ import sys
 from typing import List, Optional
 
 import setproctitle
-from vllm_router.mini_lb import MiniLoadBalancer
-from vllm_router.router_args import RouterArgs
+from lmdeploy_router.mini_lb import MiniLoadBalancer
+from lmdeploy_router.router_args import RouterArgs
 
 logger = logging.getLogger("router")
 
 try:
-    from vllm_router.router import Router
+    from lmdeploy_router.router import Router
 except ImportError:
     Router = None
     logger.warning(
@@ -20,7 +20,7 @@ except ImportError:
 
 def launch_router(args: argparse.Namespace) -> Optional[Router]:
     """
-    Launch the VLLM router with the configuration from parsed arguments.
+    Launch the LMDeploy router with the configuration from parsed arguments.
 
     Args:
         args: Namespace object containing router configuration
@@ -29,7 +29,7 @@ def launch_router(args: argparse.Namespace) -> Optional[Router]:
     Returns:
         Router instance if successful, None if failed
     """
-    setproctitle.setproctitle("vllm::router")
+    setproctitle.setproctitle("lmdeploy::router")
     try:
         # Convert to RouterArgs if needed
         if not isinstance(args, RouterArgs):

@@ -1,12 +1,12 @@
 use axum::Router;
-use reqwest::Client;
-use std::sync::Arc;
-use vllm_router_rs::{
+use lmdeploy_router_rs::{
     config::RouterConfig,
     otel_trace,
     routers::RouterTrait,
     server::{build_app_with_request_tracing, AppContext, AppState},
 };
+use reqwest::Client;
+use std::sync::Arc;
 
 /// Create a test Axum application using the actual server's build_app function
 #[allow(dead_code)]

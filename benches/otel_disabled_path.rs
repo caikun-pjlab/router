@@ -1,7 +1,7 @@
 use axum::http::{HeaderMap, HeaderValue, Request};
 use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
+use lmdeploy_router_rs::{middleware::RequestSpan, otel_trace, routers::header_utils};
 use tower_http::trace::MakeSpan;
-use vllm_router_rs::{middleware::RequestSpan, otel_trace, routers::header_utils};
 
 fn bench_request_span_disabled(c: &mut Criterion) {
     otel_trace::shutdown_otel();

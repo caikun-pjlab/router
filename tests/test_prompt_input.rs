@@ -1,5 +1,5 @@
 /// Tests for PromptInput enum supporting str, list[str], list[int], list[list[int]]
-use vllm_router_rs::protocols::spec::{CompletionRequest, PromptInput};
+use lmdeploy_router_rs::protocols::spec::{CompletionRequest, PromptInput};
 
 #[test]
 fn test_prompt_input_single_string() {

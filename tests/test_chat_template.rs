@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use vllm_router_rs::tokenizer::chat_template::{ChatMessage, ChatTemplateProcessor};
+    use lmdeploy_router_rs::tokenizer::chat_template::{ChatMessage, ChatTemplateProcessor};
 
     #[test]
     fn test_chat_message_helpers() {

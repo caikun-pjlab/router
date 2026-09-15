@@ -1,6 +1,6 @@
 # Buildkite CI/CD Configuration
 
-This directory contains the Buildkite pipeline configurations for the vLLM Router project.
+This directory contains the Buildkite pipeline configurations for the LMDeploy Router project.
 
 ## Pipeline Files
 
@@ -106,7 +106,7 @@ bash ./run_accuracy_test.sh
 **Requirements:**
 - 4+ GPUs
 - Docker with GPU support
-- vLLM router binary in PATH
+- LMDeploy router binary in PATH
 
 ### Debugging Failed Tests
 
@@ -126,7 +126,7 @@ Runs in parallel for quick feedback:
 
 ### Build
 Creates release artifacts:
-- Rust binary (`target/release/vllm-router`)
+- Rust binary (`target/release/lmdeploy-router`)
 - Python wheels and source distribution
 
 ### Tests

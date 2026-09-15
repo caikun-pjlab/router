@@ -1,4 +1,4 @@
-# vLLM Router Release Pipeline
+# LMDeploy Router Release Pipeline
 # This pipeline is triggered on version tags (v*) to build and publish releases.
 # It also supports nightly Docker builds when triggered with NIGHTLY=1.
 
@@ -58,7 +58,7 @@ steps:
             - "bash"
             - ".buildkite/build-wheel.sh"
     artifact_paths:
-      - "target/release/vllm-router"
+      - "target/release/lmdeploy-router"
       - "dist/*.whl"
       - "dist/*.tar.gz"
     depends_on: "version-check"
@@ -93,10 +93,10 @@ steps:
   - label: ":test_tube: Smoke Test Release Binary (x86_64)"
     key: "smoke-test-binary-x86_64"
     command: |
-      buildkite-agent artifact download "target/release/vllm-router" .
-      chmod +x target/release/vllm-router
-      docker run --rm -v "$$PWD:/workdir" -w /workdir debian:bullseye ./target/release/vllm-router --version
-      docker run --rm -v "$$PWD:/workdir" -w /workdir debian:bullseye ./target/release/vllm-router --help
+      buildkite-agent artifact download "target/release/lmdeploy-router" .
+      chmod +x target/release/lmdeploy-router
+      docker run --rm -v "$$PWD:/workdir" -w /workdir debian:bullseye ./target/release/lmdeploy-router --version
+      docker run --rm -v "$$PWD:/workdir" -w /workdir debian:bullseye ./target/release/lmdeploy-router --help
     agents:
       queue: "cpu_queue_release"
 
@@ -105,7 +105,7 @@ steps:
     command: |
       buildkite-agent artifact download "dist/*x86_64*.whl" .
       pip install dist/*x86_64*.whl
-      python -c "import vllm_router; print(vllm_router.__version__)"
+      python -c "import lmdeploy_router; print(lmdeploy_router.__version__)"
     agents:
       queue: "cpu_queue_release"
 
@@ -114,7 +114,7 @@ steps:
     command: |
       buildkite-agent artifact download "dist/*aarch64*.whl" .
       pip install dist/*aarch64*.whl
-      python -c "import vllm_router; print(vllm_router.__version__)"
+      python -c "import lmdeploy_router; print(lmdeploy_router.__version__)"
     agents:
       queue: "arm64_cpu_queue_release"
 
@@ -158,7 +158,7 @@ steps:
   # ============================================================================
   # Nightly Docker Images (only when NIGHTLY=1)
   # Builds multi-arch Docker images and publishes to DockerHub as
-  # vllm/vllm-router:nightly. Triggered daily via scheduled build.
+  # vllm/lmdeploy-router:nightly. Triggered daily via scheduled build.
   # ============================================================================
   - group: ":docker: Build and push nightly Docker images"
     key: "build-nightly-docker-images"
@@ -170,8 +170,8 @@ steps:
         agents:
           queue: cpu_queue_release
         commands:
-          - "DOCKER_BUILDKIT=1 docker build --tag vllm/vllm-router:nightly-x86_64 --progress plain -f Dockerfile.router ."
-          - "docker push vllm/vllm-router:nightly-x86_64"
+          - "DOCKER_BUILDKIT=1 docker build --tag vllm/lmdeploy-router:nightly-x86_64 --progress plain -f Dockerfile.router ."
+          - "docker push vllm/lmdeploy-router:nightly-x86_64"
         plugins:
           - docker-login#v3.0.0:
               username: vllmbot
@@ -185,8 +185,8 @@ steps:
         agents:
           queue: arm64_cpu_queue_release
         commands:
-          - "DOCKER_BUILDKIT=1 docker build --tag vllm/vllm-router:nightly-aarch64 --progress plain -f Dockerfile.router ."
-          - "docker push vllm/vllm-router:nightly-aarch64"
+          - "DOCKER_BUILDKIT=1 docker build --tag vllm/lmdeploy-router:nightly-aarch64 --progress plain -f Dockerfile.router ."
+          - "docker push vllm/lmdeploy-router:nightly-aarch64"
         plugins:
           - docker-login#v3.0.0:
               username: vllmbot
@@ -207,10 +207,10 @@ steps:
           queue: cpu_queue_release
         commands:
           # Create and push multi-arch manifests
-          - "docker manifest create vllm/vllm-router:nightly vllm/vllm-router:nightly-x86_64 vllm/vllm-router:nightly-aarch64 --amend"
-          - "docker manifest create vllm/vllm-router:nightly-$$(date +%Y%m%d)-$${BUILDKITE_COMMIT:0:7} vllm/vllm-router:nightly-x86_64 vllm/vllm-router:nightly-aarch64 --amend"
-          - "docker manifest push vllm/vllm-router:nightly"
-          - "docker manifest push vllm/vllm-router:nightly-$$(date +%Y%m%d)-$${BUILDKITE_COMMIT:0:7}"
+          - "docker manifest create vllm/lmdeploy-router:nightly vllm/lmdeploy-router:nightly-x86_64 vllm/lmdeploy-router:nightly-aarch64 --amend"
+          - "docker manifest create vllm/lmdeploy-router:nightly-$$(date +%Y%m%d)-$${BUILDKITE_COMMIT:0:7} vllm/lmdeploy-router:nightly-x86_64 vllm/lmdeploy-router:nightly-aarch64 --amend"
+          - "docker manifest push vllm/lmdeploy-router:nightly"
+          - "docker manifest push vllm/lmdeploy-router:nightly-$$(date +%Y%m%d)-$${BUILDKITE_COMMIT:0:7}"
           # Clean up old nightly builds (keep only last 14)
           - "bash .buildkite/scripts/cleanup-nightly-router-builds.sh"
         plugins:

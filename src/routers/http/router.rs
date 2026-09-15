@@ -207,11 +207,11 @@ impl Router {
         loop {
             if start_time.elapsed() > Duration::from_secs(worker_startup_timeout_secs) {
                 error!(
-                    "Timeout {}s waiting for hosts {:?} to become healthy. Please set --router-worker-startup-timeout-secs (vllm_router.launch_server) or --worker-startup-timeout-secs (vllm_worker.router) to a larger value",
+                    "Timeout {}s waiting for hosts {:?} to become healthy. Please set --router-worker-startup-timeout-secs (lmdeploy_router.launch_server) or --worker-startup-timeout-secs (vllm_worker.router) to a larger value",
                     worker_startup_timeout_secs, unique_hosts_vec
                 );
                 return Err(format!(
-                    "Timeout {}s waiting for hosts {:?} to become healthy. Please set --router-worker-startup-timeout-secs (vllm_router.launch_server) or --worker-startup-timeout-secs (vllm_worker.router) to a larger value",
+                    "Timeout {}s waiting for hosts {:?} to become healthy. Please set --router-worker-startup-timeout-secs (lmdeploy_router.launch_server) or --worker-startup-timeout-secs (vllm_worker.router) to a larger value",
                     worker_startup_timeout_secs, unique_hosts_vec
                 ));
             }
@@ -882,11 +882,11 @@ impl Router {
         loop {
             if start_time.elapsed() > Duration::from_secs(self.worker_startup_timeout_secs) {
                 error!(
-                    "Timeout {}s waiting for worker {} to become healthy. Please set --router-worker-startup-timeout-secs (vllm_router.launch_server) or --worker-startup-timeout-secs (vllm_worker.router) to a larger value",
+                    "Timeout {}s waiting for worker {} to become healthy. Please set --router-worker-startup-timeout-secs (lmdeploy_router.launch_server) or --worker-startup-timeout-secs (vllm_worker.router) to a larger value",
                     self.worker_startup_timeout_secs, worker_url
                 );
                 return Err(format!(
-                    "Timeout {}s waiting for worker {} to become healthy. Please set --router-worker-startup-timeout-secs (vllm_router.launch_server) or --worker-startup-timeout-secs (vllm_worker.router) to a larger value",
+                    "Timeout {}s waiting for worker {} to become healthy. Please set --router-worker-startup-timeout-secs (lmdeploy_router.launch_server) or --worker-startup-timeout-secs (vllm_worker.router) to a larger value",
                     self.worker_startup_timeout_secs, worker_url
                 ));
             }

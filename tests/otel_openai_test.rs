@@ -6,6 +6,12 @@ use axum::{
     http::{HeaderMap, HeaderValue, StatusCode},
 };
 use common::mock_openai_server::MockOpenAIServer;
+use lmdeploy_router_rs::{
+    middleware::RequestSpan,
+    otel_trace,
+    protocols::spec::ChatCompletionRequest,
+    routers::{openai_router::OpenAIRouter, RouterTrait},
+};
 use opentelemetry::{global, propagation::TextMapCompositePropagator, trace::TracerProvider as _};
 use opentelemetry_sdk::{
     propagation::{BaggagePropagator, TraceContextPropagator},
@@ -14,12 +20,6 @@ use opentelemetry_sdk::{
 };
 use tower_http::trace::MakeSpan;
 use tracing_subscriber::layer::SubscriberExt;
-use vllm_router_rs::{
-    middleware::RequestSpan,
-    otel_trace,
-    protocols::spec::ChatCompletionRequest,
-    routers::{openai_router::OpenAIRouter, RouterTrait},
-};
 
 fn setup_otel_harness() -> (
     InMemorySpanExporter,

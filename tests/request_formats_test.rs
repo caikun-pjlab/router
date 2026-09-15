@@ -1,11 +1,11 @@
 mod common;
 
 use common::mock_worker::{HealthStatus, MockWorker, MockWorkerConfig, WorkerType};
+use lmdeploy_router_rs::config::{RouterConfig, RoutingMode};
+use lmdeploy_router_rs::routers::{RouterFactory, RouterTrait};
 use reqwest::Client;
 use serde_json::json;
 use std::sync::Arc;
-use vllm_router_rs::config::{RouterConfig, RoutingMode};
-use vllm_router_rs::routers::{RouterFactory, RouterTrait};
 
 /// Test context that manages mock workers
 struct TestContext {
@@ -101,7 +101,7 @@ impl TestContext {
 mod request_format_tests {
     use super::*;
     use axum::body::to_bytes;
-    use vllm_router_rs::protocols::spec::{
+    use lmdeploy_router_rs::protocols::spec::{
         ChatCompletionRequest, GenerateRequest, GenerateResponse,
     };
 

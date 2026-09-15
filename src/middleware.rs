@@ -210,7 +210,7 @@ impl<B> OnRequest<B> for RequestLogger {
 
         // Log the request start
         debug!(
-            target: "vllm_router_rs::request",
+            target: "lmdeploy_router_rs::request",
             "started processing request"
         );
     }
@@ -251,17 +251,17 @@ impl<B> OnResponse<B> for ResponseLogger {
         let _enter = span.enter();
         if status.is_server_error() {
             error!(
-                target: "vllm_router_rs::response",
+                target: "lmdeploy_router_rs::response",
                 "request failed with server error"
             );
         } else if status.is_client_error() {
             warn!(
-                target: "vllm_router_rs::response",
+                target: "lmdeploy_router_rs::response",
                 "request failed with client error"
             );
         } else {
             debug!(
-                target: "vllm_router_rs::response",
+                target: "lmdeploy_router_rs::response",
                 "finished processing request"
             );
         }
@@ -290,7 +290,7 @@ impl OnFailure<ServerErrorsFailureClass> for FailureLogger {
 
         let _enter = span.enter();
         error!(
-            target: "vllm_router_rs::response",
+            target: "lmdeploy_router_rs::response",
             "{message}"
         );
 
@@ -340,7 +340,7 @@ pub struct RequestLogEntry {
 pub fn log_request(entry: RequestLogEntry) {
     if entry.status >= 500 {
         tracing::error!(
-            target: "vllm_router_rs::http",
+            target: "lmdeploy_router_rs::http",
             request_id = %entry.request_id,
             method = %entry.method,
             uri = %entry.uri,
@@ -353,7 +353,7 @@ pub fn log_request(entry: RequestLogEntry) {
         );
     } else if entry.status >= 400 {
         tracing::warn!(
-            target: "vllm_router_rs::http",
+            target: "lmdeploy_router_rs::http",
             request_id = %entry.request_id,
             method = %entry.method,
             uri = %entry.uri,
@@ -365,7 +365,7 @@ pub fn log_request(entry: RequestLogEntry) {
         );
     } else {
         tracing::info!(
-            target: "vllm_router_rs::http",
+            target: "lmdeploy_router_rs::http",
             request_id = %entry.request_id,
             method = %entry.method,
             uri = %entry.uri,
