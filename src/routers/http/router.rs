@@ -207,11 +207,11 @@ impl Router {
         loop {
             if start_time.elapsed() > Duration::from_secs(worker_startup_timeout_secs) {
                 error!(
-                    "Timeout {}s waiting for hosts {:?} to become healthy. Please set --router-worker-startup-timeout-secs (lmdeploy_router.launch_server) or --worker-startup-timeout-secs (vllm_worker.router) to a larger value",
+                    "Timeout {}s waiting for hosts {:?} to become healthy. Set --worker-startup-timeout-secs to a larger value",
                     worker_startup_timeout_secs, unique_hosts_vec
                 );
                 return Err(format!(
-                    "Timeout {}s waiting for hosts {:?} to become healthy. Please set --router-worker-startup-timeout-secs (lmdeploy_router.launch_server) or --worker-startup-timeout-secs (vllm_worker.router) to a larger value",
+                    "Timeout {}s waiting for hosts {:?} to become healthy. Set --worker-startup-timeout-secs to a larger value",
                     worker_startup_timeout_secs, unique_hosts_vec
                 ));
             }
@@ -570,7 +570,7 @@ impl Router {
         endpoint: &str,
         method: Method,
     ) -> Response {
-        // TODO: currently the vllm worker is using in-memory state management, so this implementation has to fan out to all workers.
+        // TODO: currently the backend is using in-memory state management, so this implementation has to fan out to all workers.
         // Eventually, we need to have router to manage the chat history with a proper database, will update this implementation accordingly.
         let worker_urls = self.get_worker_urls();
         if worker_urls.is_empty() {
@@ -882,11 +882,11 @@ impl Router {
         loop {
             if start_time.elapsed() > Duration::from_secs(self.worker_startup_timeout_secs) {
                 error!(
-                    "Timeout {}s waiting for worker {} to become healthy. Please set --router-worker-startup-timeout-secs (lmdeploy_router.launch_server) or --worker-startup-timeout-secs (vllm_worker.router) to a larger value",
+                    "Timeout {}s waiting for worker {} to become healthy. Set --worker-startup-timeout-secs to a larger value",
                     self.worker_startup_timeout_secs, worker_url
                 );
                 return Err(format!(
-                    "Timeout {}s waiting for worker {} to become healthy. Please set --router-worker-startup-timeout-secs (lmdeploy_router.launch_server) or --worker-startup-timeout-secs (vllm_worker.router) to a larger value",
+                    "Timeout {}s waiting for worker {} to become healthy. Set --worker-startup-timeout-secs to a larger value",
                     self.worker_startup_timeout_secs, worker_url
                 ));
             }

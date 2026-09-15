@@ -1127,7 +1127,7 @@ pub async fn startup(config: ServerConfig) -> Result<(), Box<dyn std::error::Err
                         .register_router(RouterId::new("http-pd".to_string()), Arc::from(http_pd));
                 }
                 Err(e) => {
-                    warn!("Failed to create HTTP vLLM PD router: {e}");
+                    warn!("Failed to create HTTP PD router: {e}");
                 }
             }
 

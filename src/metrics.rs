@@ -172,89 +172,89 @@ pub fn init_metrics() {
 
     // Tokenizer metrics
     describe_histogram!(
-        "vllm_tokenizer_encode_duration_seconds",
+        "lmdeploy_router_tokenizer_encode_duration_seconds",
         "Time to encode text to tokens"
     );
     describe_histogram!(
-        "vllm_tokenizer_decode_duration_seconds",
+        "lmdeploy_router_tokenizer_decode_duration_seconds",
         "Time to decode tokens to text"
     );
     describe_histogram!(
-        "vllm_tokenizer_encode_batch_duration_seconds",
+        "lmdeploy_router_tokenizer_encode_batch_duration_seconds",
         "Time to encode a batch of texts"
     );
     describe_counter!(
-        "vllm_tokenizer_encode_requests_total",
+        "lmdeploy_router_tokenizer_encode_requests_total",
         "Total number of encode requests by tokenizer type"
     );
     describe_counter!(
-        "vllm_tokenizer_decode_requests_total",
+        "lmdeploy_router_tokenizer_decode_requests_total",
         "Total number of decode requests by tokenizer type"
     );
     describe_counter!(
-        "vllm_tokenizer_encode_errors_total",
+        "lmdeploy_router_tokenizer_encode_errors_total",
         "Total number of encode errors by error type"
     );
     describe_counter!(
-        "vllm_tokenizer_decode_errors_total",
+        "lmdeploy_router_tokenizer_decode_errors_total",
         "Total number of decode errors by error type"
     );
     describe_histogram!(
-        "vllm_tokenizer_tokens_per_encode",
+        "lmdeploy_router_tokenizer_tokens_per_encode",
         "Number of tokens produced per encode operation"
     );
     describe_histogram!(
-        "vllm_tokenizer_chars_per_encode",
+        "lmdeploy_router_tokenizer_chars_per_encode",
         "Number of characters in input text per encode"
     );
     describe_histogram!(
-        "vllm_tokenizer_tokens_per_decode",
+        "lmdeploy_router_tokenizer_tokens_per_decode",
         "Number of tokens decoded per operation"
     );
     describe_gauge!(
-        "vllm_tokenizer_vocab_size",
+        "lmdeploy_router_tokenizer_vocab_size",
         "Vocabulary size of the loaded tokenizer"
     );
 
     // Stop sequence detection metrics
     describe_counter!(
-        "vllm_tokenizer_stop_sequences_detected_total",
+        "lmdeploy_router_tokenizer_stop_sequences_detected_total",
         "Total stop sequences detected by type"
     );
     describe_counter!(
-        "vllm_tokenizer_partial_matches_total",
+        "lmdeploy_router_tokenizer_partial_matches_total",
         "Total partial stop sequence matches (jailed text)"
     );
     describe_histogram!(
-        "vllm_tokenizer_stop_detection_duration_seconds",
+        "lmdeploy_router_tokenizer_stop_detection_duration_seconds",
         "Time to check for stop sequences per token"
     );
 
     // Streaming decode metrics
     describe_counter!(
-        "vllm_tokenizer_stream_tokens_total",
+        "lmdeploy_router_tokenizer_stream_tokens_total",
         "Total tokens processed in streaming decode"
     );
     describe_counter!(
-        "vllm_tokenizer_stream_incomplete_utf8_total",
+        "lmdeploy_router_tokenizer_stream_incomplete_utf8_total",
         "Total incomplete UTF-8 sequences detected"
     );
     describe_histogram!(
-        "vllm_tokenizer_stream_step_duration_seconds",
+        "lmdeploy_router_tokenizer_stream_step_duration_seconds",
         "Time per streaming decode step"
     );
 
     // Factory metrics
     describe_counter!(
-        "vllm_tokenizer_factory_loads_total",
+        "lmdeploy_router_tokenizer_factory_loads_total",
         "Total tokenizer loads by file type"
     );
     describe_counter!(
-        "vllm_tokenizer_factory_errors_total",
+        "lmdeploy_router_tokenizer_factory_errors_total",
         "Total tokenizer loading errors by type"
     );
     describe_histogram!(
-        "vllm_tokenizer_factory_load_duration_seconds",
+        "lmdeploy_router_tokenizer_factory_load_duration_seconds",
         "Time to load and initialize tokenizer"
     );
 }
@@ -519,57 +519,59 @@ impl RouterMetrics {
 impl TokenizerMetrics {
     // Encoding metrics
     pub fn record_encode_request(tokenizer_type: &str) {
-        counter!("vllm_tokenizer_encode_requests_total",
+        counter!("lmdeploy_router_tokenizer_encode_requests_total",
             "tokenizer_type" => tokenizer_type.to_string()
         )
         .increment(1);
     }
 
     pub fn record_encode_duration(duration: Duration) {
-        histogram!("vllm_tokenizer_encode_duration_seconds").record(duration.as_secs_f64());
+        histogram!("lmdeploy_router_tokenizer_encode_duration_seconds")
+            .record(duration.as_secs_f64());
     }
 
     pub fn record_encode_error(error_type: &str) {
-        counter!("vllm_tokenizer_encode_errors_total",
+        counter!("lmdeploy_router_tokenizer_encode_errors_total",
             "error_type" => error_type.to_string()
         )
         .increment(1);
     }
 
     pub fn record_tokens_per_encode(token_count: usize) {
-        histogram!("vllm_tokenizer_tokens_per_encode").record(token_count as f64);
+        histogram!("lmdeploy_router_tokenizer_tokens_per_encode").record(token_count as f64);
     }
 
     pub fn record_chars_per_encode(char_count: usize) {
-        histogram!("vllm_tokenizer_chars_per_encode").record(char_count as f64);
+        histogram!("lmdeploy_router_tokenizer_chars_per_encode").record(char_count as f64);
     }
 
     // Decoding metrics
     pub fn record_decode_request(tokenizer_type: &str) {
-        counter!("vllm_tokenizer_decode_requests_total",
+        counter!("lmdeploy_router_tokenizer_decode_requests_total",
             "tokenizer_type" => tokenizer_type.to_string()
         )
         .increment(1);
     }
 
     pub fn record_decode_duration(duration: Duration) {
-        histogram!("vllm_tokenizer_decode_duration_seconds").record(duration.as_secs_f64());
+        histogram!("lmdeploy_router_tokenizer_decode_duration_seconds")
+            .record(duration.as_secs_f64());
     }
 
     pub fn record_decode_error(error_type: &str) {
-        counter!("vllm_tokenizer_decode_errors_total",
+        counter!("lmdeploy_router_tokenizer_decode_errors_total",
             "error_type" => error_type.to_string()
         )
         .increment(1);
     }
 
     pub fn record_tokens_per_decode(token_count: usize) {
-        histogram!("vllm_tokenizer_tokens_per_decode").record(token_count as f64);
+        histogram!("lmdeploy_router_tokenizer_tokens_per_decode").record(token_count as f64);
     }
 
     // Batch encoding metrics
     pub fn record_encode_batch_duration(duration: Duration, batch_size: usize) {
-        histogram!("vllm_tokenizer_encode_batch_duration_seconds",
+        histogram!("lmdeploy_router_tokenizer_encode_batch_duration_seconds",
             "batch_size" => batch_size.to_string()
         )
         .record(duration.as_secs_f64());
@@ -577,55 +579,58 @@ impl TokenizerMetrics {
 
     // Stop sequence detection metrics
     pub fn record_stop_sequence_detected(stop_type: &str) {
-        counter!("vllm_tokenizer_stop_sequences_detected_total",
+        counter!("lmdeploy_router_tokenizer_stop_sequences_detected_total",
             "type" => stop_type.to_string()
         )
         .increment(1);
     }
 
     pub fn record_partial_match() {
-        counter!("vllm_tokenizer_partial_matches_total").increment(1);
+        counter!("lmdeploy_router_tokenizer_partial_matches_total").increment(1);
     }
 
     pub fn record_stop_detection_duration(duration: Duration) {
-        histogram!("vllm_tokenizer_stop_detection_duration_seconds").record(duration.as_secs_f64());
+        histogram!("lmdeploy_router_tokenizer_stop_detection_duration_seconds")
+            .record(duration.as_secs_f64());
     }
 
     // Streaming decode metrics
     pub fn record_stream_token() {
-        counter!("vllm_tokenizer_stream_tokens_total").increment(1);
+        counter!("lmdeploy_router_tokenizer_stream_tokens_total").increment(1);
     }
 
     pub fn record_incomplete_utf8() {
-        counter!("vllm_tokenizer_stream_incomplete_utf8_total").increment(1);
+        counter!("lmdeploy_router_tokenizer_stream_incomplete_utf8_total").increment(1);
     }
 
     pub fn record_stream_step_duration(duration: Duration) {
-        histogram!("vllm_tokenizer_stream_step_duration_seconds").record(duration.as_secs_f64());
+        histogram!("lmdeploy_router_tokenizer_stream_step_duration_seconds")
+            .record(duration.as_secs_f64());
     }
 
     // Factory metrics
     pub fn record_factory_load(file_type: &str) {
-        counter!("vllm_tokenizer_factory_loads_total",
+        counter!("lmdeploy_router_tokenizer_factory_loads_total",
             "file_type" => file_type.to_string()
         )
         .increment(1);
     }
 
     pub fn record_factory_error(error_type: &str) {
-        counter!("vllm_tokenizer_factory_errors_total",
+        counter!("lmdeploy_router_tokenizer_factory_errors_total",
             "error_type" => error_type.to_string()
         )
         .increment(1);
     }
 
     pub fn record_factory_load_duration(duration: Duration) {
-        histogram!("vllm_tokenizer_factory_load_duration_seconds").record(duration.as_secs_f64());
+        histogram!("lmdeploy_router_tokenizer_factory_load_duration_seconds")
+            .record(duration.as_secs_f64());
     }
 
     // Vocabulary metrics
     pub fn set_vocab_size(tokenizer_type: &str, size: usize) {
-        gauge!("vllm_tokenizer_vocab_size",
+        gauge!("lmdeploy_router_tokenizer_vocab_size",
             "tokenizer_type" => tokenizer_type.to_string()
         )
         .set(size as f64);

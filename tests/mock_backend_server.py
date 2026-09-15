@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Simple mock vLLM server for testing the router's transparent proxy feature.
+Simple mock backend server for testing the router's transparent proxy feature.
 
 Usage:
-    python mock_vllm_server.py [--port PORT] [--host HOST]
+    python mock_backend_server.py [--port PORT] [--host HOST]
 
 Example:
     # Start server on port 8081
-    python mock_vllm_server.py --port 8081
+    python mock_backend_server.py --port 8081
 
     # Test with curl
     curl -X POST http://localhost:8081/generate \
@@ -22,8 +22,8 @@ from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 
-class MockVLLMHandler(BaseHTTPRequestHandler):
-    """Handler for mock vLLM server requests."""
+class MockBackendHandler(BaseHTTPRequestHandler):
+    """Handler for mock backend server requests."""
 
     def log_request_info(self, method: str):
         """Log request information to stdout."""
@@ -161,7 +161,7 @@ class MockVLLMHandler(BaseHTTPRequestHandler):
                 "message": f"POST request received at {self.path}",
                 "path": self.path,
                 "body_received": body_json,
-                "server": "mock-vllm-server"
+                "server": "mock-backend-server"
             }
             self.send_json_response(200, response)
 
@@ -172,7 +172,7 @@ class MockVLLMHandler(BaseHTTPRequestHandler):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Mock vLLM server for testing router transparent proxy"
+        description="Mock backend server for testing router transparent proxy"
     )
     parser.add_argument(
         "--port", "-p",
@@ -189,9 +189,9 @@ def main():
     args = parser.parse_args()
 
     server_address = (args.host, args.port)
-    httpd = HTTPServer(server_address, MockVLLMHandler)
+    httpd = HTTPServer(server_address, MockBackendHandler)
 
-    print(f"Mock vLLM Server")
+    print(f"Mock Backend Server")
     print(f"================")
     print(f"Listening on {args.host}:{args.port}")
     print(f"")

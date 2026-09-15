@@ -297,7 +297,7 @@ struct CliArgs {
     #[arg(long, default_value = "memory", value_parser = ["memory", "none"])]
     history_backend: String,
 
-    /// Enable profiling calls to vLLM workers
+    /// Enable profiling calls to backend workers
     #[arg(long, default_value_t = false)]
     profile: bool,
 

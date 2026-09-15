@@ -24,61 +24,50 @@ Release pipeline triggered on version tags (e.g., `v1.2.3`). Handles:
 
 ## P/D Disaggregation Test
 
-The P/D (Prefill/Decode) disaggregation test validates the router's ability to coordinate separate prefill and decode vLLM instances.
+The P/D (Prefill/Decode) disaggregation test validates the router's ability to coordinate separate LMDeploy Prefill and Decode instances.
 
 ### How It Works
 
-The test launches:
-1. **Prefill instance(s)**: vLLM servers configured for prefill operations
-2. **Decode instance(s)**: vLLM servers configured for decode operations
-3. **Router**: Coordinates requests between prefill and decode instances
+The test expects externally managed LMDeploy services:
 
-See `scripts/llama3.1/` for example setup scripts showing the proper configuration.
+1. **Prefill instance(s)**: LMDeploy servers started with `--role Prefill`
+2. **Decode instance(s)**: LMDeploy servers started with `--role Decode`
+3. **Router**: Started by the test with `--lmdeploy-pd-disaggregation`
+
+The migration backend and RDMA environment must be provisioned outside the router test.
 
 ### Test Script
 
-Location: `py_test/e2e/pd_disagg_vllm/run_accuracy_test.sh`
+Location: `py_test/e2e/pd_disagg_lmdeploy/run_accuracy_test.sh`
 
 The test script:
-- Launches prefill and decode vLLM instances in Docker containers
-- Starts the router with `--pd-disaggregation` flag
-- Runs accuracy validation tests
-- Cleans up containers on exit
+
+- Starts the router with LMDeploy P/D disaggregation
+- Registers configured Prefill and Decode URLs
+- Runs health, completion, and streaming validation
+- Cleans up the router on exit
 
 ### CI Configuration
 
-The test runs in the pipeline at `.buildkite/pipeline.yml:97-132`:
-
-```yaml
-- label: ":satellite: P/D Disaggregation Test (4 GPUs)"
-  timeout_in_minutes: 30
-  retry:
-    automatic:
-      - exit_status: "*"
-        limit: 2
-```
+The test runs in `.buildkite/pipeline.yml` when `PREFILL_URLS` and `DECODE_URLS` are supplied.
 
 **Key features:**
-- Requires 4 GPUs (runs on `gpu_4_queue`)
-- 30 minute timeout
-- Automatic retry (up to 2 attempts) for flaky failures
-- Manual retry option available
+
+- External Prefill/Decode services with a matching migration backend
+- Automatic retry options are configured in the pipeline
+- Router logs are collected as `/tmp/lmdeploy-pd-router.log`
 
 ### Environment Variables
 
-The test script supports these environment variables for customization:
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `VLLM_DOCKER_IMAGE` | `vllm/vllm-openai:latest` | vLLM Docker image |
-| `MODEL_NAMES` | `meta-llama/Llama-3.2-1B-Instruct` | Model to test |
-| `GPU_MEMORY_UTILIZATION` | `0.6` | GPU memory utilization (0.0-1.0) |
-| `KV_BUFFER_DEVICE` | `cuda` | KV buffer device (cuda/cpu) |
-| `DECODER_KV_LAYOUT` | `HND` | KV layout (HND/NHD) |
-| `NUM_PREFILL_INSTANCES` | `1` | Number of prefill instances |
-| `NUM_DECODE_INSTANCES` | `1` | Number of decode instances |
-| `PREFILLER_TP_SIZE` | `1` | Tensor parallel size for prefill |
-| `DECODER_TP_SIZE` | `1` | Tensor parallel size for decode |
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `PREFILL_URLS` | Yes | Comma-separated Prefill API URLs |
+| `DECODE_URLS` | Yes | Comma-separated Decode API URLs |
+| `MODEL_PATH` | No | Model path used by the external services |
+| `MODEL_NAME` | Yes | Model name exposed by `/v1/models` |
+| `LMDEPLOY_ROUTER_BIN` | No | Router binary path |
+| `MIGRATION_PROTOCOL` | No | `rdma` or `nvlink`; default is `rdma` |
+| `RDMA_LINK_TYPE` | No | `roce` or `ib`; default is `roce` |
 
 ### Artifacts
 
@@ -91,7 +80,7 @@ On test completion (success or failure), artifacts are collected:
 To run the test locally:
 
 ```bash
-cd py_test/e2e/pd_disagg_vllm
+cd py_test/e2e/pd_disagg_lmdeploy
 
 # Run with defaults
 bash ./run_accuracy_test.sh
@@ -182,6 +171,6 @@ Buildkite provides these built-in variables:
 ## Additional Resources
 
 - [Buildkite Documentation](https://buildkite.com/docs)
-- [vLLM Documentation](https://docs.vllm.ai/)
+- [LMDeploy Documentation](https://lmdeploy.readthedocs.io/)
 - [Project README](../README.md)
 - [Example P/D Setup Scripts](../scripts/llama3.1/)

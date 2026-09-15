@@ -7,7 +7,7 @@ body:
 - type: markdown
   attributes:
     value: >
-      #### Before submitting an issue, please make sure the issue hasn't been already addressed by searching through [the existing and past issues](https://github.com/vllm-project/lmdeploy-router/issues?q=is%3Aissue+sort%3Acreated-desc+).
+      #### Before submitting an issue, please make sure the issue hasn't been already addressed by searching through [the existing and past issues](https://github.com/InternLM/lmdeploy-router/issues?q=is%3Aissue+sort%3Acreated-desc+).
 - type: markdown
   attributes:
     value: |
@@ -28,7 +28,7 @@ body:
       - **Python version**: Run `python --version`
       - **Operating System**: e.g., Ubuntu 22.04, macOS 14.0
       - **Deployment environment**: e.g., Kubernetes, Docker, bare metal
-      - **vLLM backend version**: Version of vLLM workers being routed to
+      - **LMDeploy backend version**: Version of LMDeploy workers being routed to
     value: |
       <details>
       <summary>Environment Information</summary>
@@ -39,7 +39,7 @@ body:
       Python version:
       Operating System:
       Deployment environment:
-      vLLM backend version:
+      LMDeploy backend version:
       ```
 
       </details>

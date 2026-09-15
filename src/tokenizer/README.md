@@ -4,7 +4,7 @@
 
 ### High-Level Overview
 
-The VLLM Router tokenizer layer provides a unified interface for text tokenization and detokenization, supporting multiple tokenizer backends (HuggingFace, Tiktoken, Mock) with sophisticated streaming capabilities and stop sequence detection. The architecture follows a trait-based design pattern enabling pluggable tokenizer implementations while maintaining consistent APIs across the router.
+The LMDeploy Router tokenizer layer provides a unified interface for text tokenization and detokenization, supporting multiple tokenizer backends (HuggingFace, Tiktoken, Mock) with sophisticated streaming capabilities and stop sequence detection. The architecture follows a trait-based design pattern enabling pluggable tokenizer implementations while maintaining consistent APIs across the router.
 
 **Key Components:**
 - **Factory Pattern**: Auto-detection and creation of appropriate tokenizer types from files or model names
@@ -546,7 +546,7 @@ pub struct DecodeStream {
 
 **Constants:**
 - `INITIAL_INCREMENTAL_DETOKENIZATION_OFFSET: usize = 5` (stream.rs:9)
-  - Matches HuggingFace TGI and vLLM standard
+  - Matches common incremental detokenization behavior
 
 **Key Methods:**
 
@@ -946,13 +946,13 @@ The `Encoding` enum must:
 ### Metrics
 
 **Metric Names (via TokenizerMetrics):**
-- `vllm_tokenizer_encode_duration_seconds`
-- `vllm_tokenizer_decode_duration_seconds`
-- `vllm_tokenizer_tokens_per_encode`
-- `vllm_tokenizer_chars_per_encode`
-- `vllm_tokenizer_factory_load_duration_seconds`
-- `vllm_tokenizer_stop_sequence_detected`
-- `vllm_tokenizer_stream_incomplete_utf8_total`
+- `lmdeploy_router_tokenizer_encode_duration_seconds`
+- `lmdeploy_router_tokenizer_decode_duration_seconds`
+- `lmdeploy_router_tokenizer_tokens_per_encode`
+- `lmdeploy_router_tokenizer_chars_per_encode`
+- `lmdeploy_router_tokenizer_factory_load_duration_seconds`
+- `lmdeploy_router_tokenizer_stop_sequence_detected`
+- `lmdeploy_router_tokenizer_stream_incomplete_utf8_total`
 
 **Labels:**
 - `tokenizer_type`: huggingface, tiktoken, mock

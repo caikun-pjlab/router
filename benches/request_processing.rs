@@ -17,7 +17,7 @@ fn default_generate_request() -> GenerateRequest {
         parameters: None,
         sampling_params: None,
         return_logprob: false,
-        // VLLM Extensions
+        // Backend extensions
         lora_path: None,
         session_params: None,
         return_hidden_states: false,
@@ -53,7 +53,7 @@ fn default_chat_completion_request() -> ChatCompletionRequest {
         parallel_tool_calls: None,
         function_call: None,
         functions: None,
-        // VLLM Extensions
+        // Backend extensions
         top_k: None,
         min_p: None,
         min_tokens: None,
@@ -66,7 +66,7 @@ fn default_chat_completion_request() -> ChatCompletionRequest {
         add_generation_prompt: true,
         continue_final_message: false,
         skip_special_tokens: true,
-        // VLLM Extensions
+        // Backend extensions
         lora_path: None,
         session_params: None,
         separate_reasoning: true,
@@ -102,7 +102,7 @@ fn default_completion_request() -> CompletionRequest {
         logit_bias: None,
         user: None,
         seed: None,
-        // VLLM Extensions
+        // Backend extensions
         top_k: None,
         min_p: None,
         min_tokens: None,
@@ -114,7 +114,7 @@ fn default_completion_request() -> CompletionRequest {
         no_stop_trim: false,
         ignore_eos: false,
         skip_special_tokens: true,
-        // VLLM Extensions
+        // Backend extensions
         lora_path: None,
         session_params: None,
         return_hidden_states: false,

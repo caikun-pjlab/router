@@ -1,4 +1,4 @@
-//! Error types for the VLLM router core
+//! Error types for the LMDeploy router core
 //!
 //! This module defines error types used throughout the router for worker operations.
 

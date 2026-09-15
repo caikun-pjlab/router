@@ -1,4 +1,4 @@
-//! Core abstractions for the VLLM router
+//! Core abstractions for the LMDeploy router
 //!
 //! This module contains the fundamental types and traits used throughout the router:
 //! - Worker trait and implementations

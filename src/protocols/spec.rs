@@ -142,7 +142,7 @@ impl<'de> Deserialize<'de> for ChatMessage {
                         serde_json::from_value(fc.clone()).ok()
                     }
                 }),
-                // `reasoning` is vLLM's canonical field. Prefer a usable canonical
+                // `reasoning` is the canonical field. Prefer a usable canonical
                 // string when both keys are present; otherwise fall back to the
                 // deprecated `reasoning_content` alias, including when `reasoning`
                 // is null or not a string. Serialization remains canonical.
@@ -1993,7 +1993,7 @@ impl GenerationRequest for GenerateRequest {
 /// We intentionally keep fields flexible to pass through to workers.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct EmbeddingRequest {
-    /// ID of the model to use (optional, vLLM supports requests without model)
+    /// ID of the model to use (optional; some backends omit it)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
 
@@ -2096,7 +2096,7 @@ impl StringOrArray {
 }
 
 /// Prompt input type supporting both text and token IDs
-/// Compatible with vLLM's prompt field format
+/// Compatible with the OpenAI prompt field format
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(untagged)]
 pub enum PromptInput {
@@ -2878,7 +2878,7 @@ mod tests {
             _ => panic!("Expected Assistant message"),
         }
 
-        // Re-serialization emits only vLLM's canonical field.
+        // Re-serialization emits only the canonical field.
         let serialized = serde_json::to_value(&message).unwrap();
         assert_eq!(
             serialized.get("reasoning").and_then(|v| v.as_str()),

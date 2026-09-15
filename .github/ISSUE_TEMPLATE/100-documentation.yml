@@ -1,5 +1,5 @@
 name: 📚 Documentation
-description: Report an issue related to vllm router documentation
+description: Report an issue related to LMDeploy Router documentation
 title: "[Doc]: "
 labels: ["documentation"]
 

@@ -199,7 +199,7 @@ impl super::super::RouterTrait for OpenAIRouter {
         _body: &GenerateRequest,
         _model_id: Option<&str>,
     ) -> Response {
-        // Generate endpoint is VLLM-specific, not supported for OpenAI backend
+        // Generate endpoint is backend-specific and not supported by the OpenAI backend
         (
             StatusCode::NOT_IMPLEMENTED,
             "Generate endpoint not supported for OpenAI backend",
@@ -217,7 +217,7 @@ impl super::super::RouterTrait for OpenAIRouter {
             return (StatusCode::SERVICE_UNAVAILABLE, "Circuit breaker open").into_response();
         }
 
-        // Serialize request body, removing VLLM-only fields
+        // Serialize request body, removing backend-specific fields
         let mut payload = match serde_json::to_value(body) {
             Ok(v) => v,
             Err(e) => {

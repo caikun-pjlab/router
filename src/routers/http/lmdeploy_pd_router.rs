@@ -1,7 +1,7 @@
 // lmdeploy PD (Prefill-Decode) Router Implementation
 // Extends PdRouterBase to handle lmdeploy-specific two-stage processing.
 //
-// lmdeploy PD protocol differs from vLLM PD:
+// LMDeploy PD protocol differs from the legacy PD protocol:
 // - Prefill request sets with_cache=true, preserve_cache=true, max_tokens=1
 // - Prefill response carries top-level id, cache_block_ids, remote_token_ids
 // - P2P RDMA connection established via /distserve/p2p_initialize + /distserve/p2p_connect

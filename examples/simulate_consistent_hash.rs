@@ -14,8 +14,8 @@ use std::collections::{BTreeMap, HashMap};
 use clap::{Parser, ValueEnum};
 use uuid::Uuid;
 
-use vllm_router_rs::policies::ConsistentHashPolicy;
-use vllm_router_rs::policies::VIRTUAL_NODES_PER_WORKER;
+use lmdeploy_router_rs::policies::ConsistentHashPolicy;
+use lmdeploy_router_rs::policies::VIRTUAL_NODES_PER_WORKER;
 
 #[derive(Clone, ValueEnum)]
 enum Mode {

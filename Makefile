@@ -1,4 +1,4 @@
-# VLLM Router Makefile
+# LMDeploy Router Makefile
 # Provides convenient shortcuts for common development tasks
 
 # Check if sccache is available and set RUSTC_WRAPPER accordingly
@@ -10,17 +10,17 @@ else
     $(info sccache not found. Install it for faster builds: cargo install sccache)
 endif
 
-.PHONY: help bench bench-quick bench-baseline bench-compare test build clean
+.PHONY: help test build clean docs check fmt dev-setup bench-ci bench-report bench-clean perf-monitor setup-sccache sccache-stats sccache-clean sccache-stop
 
 help: ## Show this help message
-	@echo "VLLM Router Development Commands"
+	@echo "LMDeploy Router Development Commands"
 	@echo "=================================="
 	@echo ""
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 
 build: ## Build the project in release mode
-	@echo "Building VLLM Router..."
+	@echo "Building LMDeploy Router..."
 	@cargo build --release
 
 test: ## Run all tests
@@ -28,24 +28,19 @@ test: ## Run all tests
 	@cargo test
 
 bench: ## Run full benchmark suite
-	@echo "Running full benchmarks..."
-	@python3 scripts/run_benchmarks.py
+	@cargo bench
 
-bench-quick: ## Run quick benchmarks only
-	@echo "Running quick benchmarks..."
-	@python3 scripts/run_benchmarks.py --quick
+bench-quick: ## Run quick benchmark benchmarks
+	@cargo bench --bench request_processing -- --quick
 
 bench-baseline: ## Save current performance as baseline
-	@echo "Saving performance baseline..."
-	@python3 scripts/run_benchmarks.py --save-baseline main
+	@cargo bench -- --save-baseline main
 
 bench-compare: ## Compare with saved baseline
-	@echo "Comparing with baseline..."
-	@python3 scripts/run_benchmarks.py --compare-baseline main
+	@cargo bench -- --baseline main
 
-bench-ci: ## Run benchmarks suitable for CI (quick mode)
-	@echo "Running CI benchmarks..."
-	@python3 scripts/run_benchmarks.py --quick
+bench-ci: ## Run benchmarks suitable for CI
+	@cargo bench --bench request_processing -- --quick
 
 clean: ## Clean build artifacts
 	@echo "Cleaning build artifacts..."

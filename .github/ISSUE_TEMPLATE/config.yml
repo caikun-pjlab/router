@@ -2,8 +2,8 @@ blank_issues_enabled: true
 
 contact_links:
   - name: Questions
-    url: https://discuss.vllm.ai
-    about: Ask questions and discuss with other vLLM community members
+    url: https://github.com/InternLM/lmdeploy/discussions
+    about: Ask questions and discuss with the LMDeploy community
   - name: Chat on Slack
-    url: https://slack.vllm.ai/
-    about: Chat with the community on Slack
+    url: https://github.com/InternLM/lmdeploy
+    about: Open a GitHub discussion

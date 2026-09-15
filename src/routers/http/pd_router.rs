@@ -803,7 +803,7 @@ impl PdRouterBase {
     }
 
     pub async fn get_server_info(&self, _req: Request<Body>) -> Response {
-        // Get info from the first decode server to match vllm's server info format
+        // Get info from the first decode server
         // Note: We use decode workers for server info to match expected format
         self.proxy_to_first_prefill_worker("get_server_info", None)
             .await

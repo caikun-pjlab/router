@@ -1,6 +1,6 @@
-# vLLM Router
+# LMDeploy Router
 
-A high-performance and light-weight request forwarding system for vLLM large scale deployments, providing advanced load balancing methods and prefill/decode disaggregation support.
+A high-performance and lightweight request forwarding system for LMDeploy deployments, providing advanced load balancing methods and prefill/decode disaggregation support.
 
 ### Key Features
 
@@ -41,7 +41,7 @@ cargo build --release
 #### Python Package
 Install from PyPI
 ```bash
-pip install vllm-router                                                                                                                                                        ```
+pip install lmdeploy-router                                                                                                                                                        ```
 
 To build from source:
 ```bash    
@@ -59,7 +59,7 @@ python -m build && pip install --force-reinstall dist/*.whl
 ```bash
 # Launch router with data parallelism (8 replicas per worker URL)
 # When data-parallel-size > 1, the router automatically creates DP-aware workers
-./target/release/vllm-router \
+./target/release/lmdeploy-router \
     --worker-urls http://worker1:8000 http://worker2:8000 \
     --policy consistent_hash \
     --intra-node-data-parallel-size 8
@@ -71,58 +71,29 @@ cargo run --release -- \
     --intra-node-data-parallel-size 8
 
 # Alternative: using python launcher
-vllm-router \
+lmdeploy-router \
   --worker-urls http://worker1:8000 http://worker2:8000 \
     --policy consistent_hash \
     --intra-node-data-parallel-size 8
 ```
 
 #### Prefill-Decode Disaggregation
+
+LMDeploy Prefill/Decode services can be registered statically or through the native `--proxy-url` registration flow. RDMA, DLSlime, and Mooncake infrastructure must be provisioned outside the router.
+
 ```bash
-# When vLLM runs the NIXL connector, prefill/decode URLs are required.
-# See a working example in scripts/llama3.1/ folder.
-cargo run --release -- \
-    --policy consistent_hash \
-    --vllm-pd-disaggregation \
+cargo run --release --bin lmdeploy-router -- \
+    --policy round_robin \
+    --lmdeploy-pd-disaggregation \
     --prefill http://127.0.0.1:8081 \
-    --prefill http://127.0.0.1:8082 \
     --decode http://127.0.0.1:8083 \
-    --decode http://127.0.0.1:8084 \
-    --decode http://127.0.0.1:8085 \
-    --decode http://127.0.0.1:8086 \
     --host 127.0.0.1 \
     --port 8090 \
-    --intra-node-data-parallel-size 1 \
-
-
-# When vLLM runs the NCCL connector, ZMQ based discovery is supported.
-# See a working example in scripts/install.sh
-cargo run --release -- \
-    --policy consistent_hash \
-    --vllm-pd-disaggregation \
-    --vllm-discovery-address 0.0.0.0:30001 \
-    --host 0.0.0.0 \
-    --port 10001 \
-    --prefill-policy consistent_hash \
-    --decode-policy consistent_hash
-
-# When vLLM runs the Mooncake connector, pass --kv-connector mooncake.
-# The router queries each prefill node's Mooncake bootstrap server at startup
-# to learn engine_id per DP rank, and injects transfer_id / remote_bootstrap_addr /
-# remote_engine_id into each request's kv_transfer_params for P/D coordination.
-cargo run --release -- \
-    --policy consistent_hash \
-    --vllm-pd-disaggregation \
-    --kv-connector mooncake \
-    --prefill http://127.0.0.1:8081 \
-    --prefill http://127.0.0.1:8082 \
-    --decode http://127.0.0.1:8083 \
-    --decode http://127.0.0.1:8084 \
-    --host 127.0.0.1 \
-    --port 8090 \
-    --intra-node-data-parallel-size 1
+    --prefill-policy round_robin \
+    --decode-policy round_robin
 ```
 
+For the native registration flow, start the router without static PD URLs and start LMDeploy services with `--role Prefill` or `--role Decode` plus `--proxy-url`.
 ## Configuration
 
 ### Authentication
@@ -135,7 +106,7 @@ When set, all HTTP endpoints require `Authorization: Bearer <token>` and tokens 
 API_KEY_VALIDATION_URLS=https://codebase.helmholtz.cloud/api/v4/user
 
 # CLI override
-vllm-router --api-key-validation-urls https://codebase.helmholtz.cloud/api/v4/user
+lmdeploy-router --api-key-validation-urls https://codebase.helmholtz.cloud/api/v4/user
 ```
 
 ### Metrics
@@ -144,7 +115,7 @@ Prometheus metrics endpoint available at `127.0.0.1:29000` by default.
 
 ```bash
 # Custom metrics configuration
-vllm-router \
+lmdeploy-router \
     --worker-urls http://localhost:8080 http://localhost:8081 \
     --prometheus-host 0.0.0.0 \
     --prometheus-port 9000
@@ -156,7 +127,7 @@ vllm-router \
 Retries are enabled by default with exponential backoff and jitter:
 
 ```bash
-vllm-router \
+lmdeploy-router \
   --worker-urls http://localhost:8080 http://localhost:8081 \
   --retry-max-retries 3 \
   --retry-initial-backoff-ms 100 \
@@ -169,7 +140,7 @@ vllm-router \
 Circuit breakers protect workers and provide automatic recovery:
 
 ```bash
-vllm-router \
+lmdeploy-router \
   --worker-urls http://localhost:8080 http://localhost:8081 \
   --cb-failure-threshold 5 \
   --cb-success-threshold 2 \
@@ -190,7 +161,7 @@ Track requests across distributed systems with configurable headers:
 
 ```bash
 # Use custom request ID headers
-vllm-router \
+lmdeploy-router \
     --worker-urls http://localhost:8080 \
     --request-id-headers x-trace-id x-request-id
 ```
@@ -228,7 +199,7 @@ Automatic worker discovery and management in Kubernetes environments.
 #### Basic Service Discovery
 
 ```bash
-vllm-router \
+lmdeploy-router \
     --service-discovery \
     --selector app=inference-worker role=inference \
     --service-discovery-namespace default
@@ -251,7 +222,7 @@ Set `rust-analyzer.linkedProjects` to the absolute path of `Cargo.toml`:
 
 ```json
 {
-  "rust-analyzer.linkedProjects": ["/workspaces/vllm/vllm-router/Cargo.toml"]
+  "rust-analyzer.linkedProjects": ["/workspaces/lmdeploy/lmdeploy-router/Cargo.toml"]
 }
 ```
 
@@ -272,4 +243,4 @@ The continuous integration pipeline includes comprehensive testing, benchmarking
 
 ## Acknowledgement
 
-This project is a fork of [SGLang Model Gateway](https://github.com/sgl-project/sglang/tree/main/sgl-model-gateway), and we would like to explicitly acknowledge and thank the original authors for their work. At this stage, our fork includes only minimal changes to preserve the existing interface and ensure compatibility with vLLM. We anticipate further divergence as we pursue the roadmap we have in mind, which is the reason for creating the fork.
+This project is a fork of [SGLang Model Gateway](https://github.com/sgl-project/sglang/tree/main/sgl-model-gateway), and we would like to explicitly acknowledge and thank the original authors for their work. At this stage, our fork includes only minimal changes to preserve the existing interface and ensure compatibility with LMDeploy. We anticipate further divergence as we pursue the roadmap we have in mind, which is the reason for creating the fork.

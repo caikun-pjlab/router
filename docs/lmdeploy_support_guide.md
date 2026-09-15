@@ -24,10 +24,10 @@
 - **动态注册**：Router 可以不指定任何后端 URL 先启动；LMDeploy API Server 再通过原生 `--proxy-url` 参数向 Router 的 `/nodes/add` 注册。普通 Hybrid 和 PD Prefill/Decode 两种部署均支持。
 - **Token-in-Token-out**：支持 LMDeploy 的 `input_ids`/`output_ids` 透传，并为所有负载均衡策略提供基于 token-id 的路由键。
 
-### vLLM vs LMDeploy PD 协议差异
+### PD 协议差异
 
-| 维度 | vLLM | LMDeploy |
-|------|------|----------|
+| 维度 | 传统 PD 语义 | LMDeploy |
+|------|--------------|----------|
 | PD 协调字段 | `kv_transfer_params`（请求体内嵌） | `migration_request`（decode 请求体） |
 | KV 传输 | nixl/mooncake/moriio engine-to-engine | RDMA (DLSlime/Mooncake) out-of-band |
 | P2P 建立 | bootstrap 信息交换（无显式端点） | `/distserve/p2p_initialize` + `/distserve/p2p_connect`（显式 HTTP） |
@@ -41,11 +41,11 @@
 核心实现涉及以下文件（包含初始 LMDeploy 适配和动态注册功能）：
 
 | 文件 | 类型 | 改动说明 |
-|------|------|----------|
+|------|--------------|----------|
 | `src/config/types.rs` | 修改 | 新增 `LMDeployMigrationProtocol` 枚举、`LMDeployRdmaConfig` 结构体、`RoutingMode::LMDeployPrefillDecode` 变体；更新 `is_pd_mode`/`is_lmdeploy_pd_mode`/`worker_count`/`get_prefill_policy`/`get_decode_policy`/`mode_type`；新增序列化测试 |
 | `src/config/validation.rs` | 修改 | 新增 `LMDeployPrefillDecode` 的 `validate_mode`/`validate_discovery`/`validate_compatibility` 三个分支 |
 | `src/routers/http/mod.rs` | 修改 | 注册 `pub mod lmdeploy_pd_router;` |
-| `src/routers/http/lmdeploy_pd_router.rs` | **新建** | `LMDeployPDRouter` 实现，仿照 `vllm_pd_router.rs` 结构 |
+| `src/routers/http/lmdeploy_pd_router.rs` | **新建** | `LMDeployPDRouter` 实现 |
 | `src/routers/factory.rs` | 修改 | 新增 `LMDeployPrefillDecode` match 分支 + `create_lmdeploy_pd_router()` |
 | `src/main.rs` | 修改 | LMDeploy PD CLI flags + mode 选择分支 + `pd_mode` 联动；允许普通/LMDeploy PD 模式零 URL 启动 |
 | `src/lib.rs` | 修改 | PyO3 Router 配置字段 + 默认值 + `new()` 入参 + `to_router_config` mode 分支 |
@@ -90,7 +90,7 @@ pub other: serde_json::Map<String, serde_json::Value>,
 
 `ChatCompletionRequest.input_ids` 使用显式的 `Option<Vec<i32>>`，与 LMDeploy 的
 `list[int] | None` 一致；`GenerateRequest.input_ids` 使用 `Option<InputIds>`，同时兼容
-LMDeploy 单请求和 Router 已有的 vLLM batch 格式。`extract_text_for_routing` 直接读取 typed
+LMDeploy 单请求和 Router 的 batch 格式。`extract_text_for_routing` 直接读取 typed
 字段并拼接为稳定路由键，优先级为：`session_id` -> `input_ids` -> 空字符串，不再从
 `#[serde(flatten)] other` 中二次解析 JSON。
 
@@ -99,8 +99,8 @@ LMDeploy 单请求和 Router 已有的 vLLM batch 格式。`extract_text_for_rou
 | Flag | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `--lmdeploy-pd-disaggregation` | bool | false | 启用 LMDeploy PD 分离模式 |
-| `--prefill` | Vec | - | prefill 节点 URL（复用 vLLM PD 的 flag） |
-| `--decode` | Vec | - | decode 节点 URL（复用 vLLM PD 的 flag） |
+| `--prefill` | Vec | - | prefill 节点 URL |
+| `--decode` | Vec | - | decode 节点 URL |
 | `--lmdeploy-migration-protocol` | enum | rdma | 迁移协议：rdma/nvlink |
 | `--lmdeploy-rdma-link-type` | enum | roce | RDMA 链路类型：roce/ib |
 | `--lmdeploy-disable-gdr` | bool | false | 禁用 GPU Direct RDMA |
@@ -736,9 +736,8 @@ pytest -v py_test/integration/lmdeploy
 
 ### 10.1 打包方式
 
-`lmdeploy-router` 是 Rust 可执行程序，使用 Maturin 的 `bin` 模式打入 wheel。专用配置位于
-`packaging/lmdeploy-router/pyproject.toml`，不会改变仓库根目录原有的 `vllm-router` Python
-扩展包配置。
+`lmdeploy-router` 是 Rust 可执行程序，使用 Maturin 的 `bin` 模式打包；专用配置位于
+`packaging/lmdeploy-router/pyproject.toml`。该产物只提供 CLI，不包含 Python 扩展模块。
 
 Cargo 的默认 `python` feature 保留了原有 PyO3 扩展构建行为；专用 wheel 配置通过
 `no-default-features = true` 关闭该 feature。Maturin 因而只打包 `[[bin]]` 定义的
@@ -794,8 +793,7 @@ cd ../..
 
 `lmdeploy-router` 使用独立版本线，初始版本为 `0.0.1`；`packaging/lmdeploy-router/pyproject.toml`
 与 `Cargo.toml` 中的版本必须保持一致。仓库根目录 `pyproject.toml` 和
-`py_src/vllm_router/version.py` 属于原有 `vllm-router` Python 包，仍保留其自身版本，打包
-`lmdeploy-router` wheel 时不会使用它们。
+`py_src/lmdeploy_router/version.py` 属于当前扩展包配置，打包二进制 wheel 时不会使用它们。
 
 ### 10.3 安装与使用
 

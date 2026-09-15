@@ -1,6 +1,6 @@
 # Load Balancing Policies
 
-The vLLM Router supports multiple load balancing policies for distributing requests across backend workers. Each policy is designed for different use cases and can be configured based on your deployment requirements.
+The LMDeploy Router supports multiple load balancing policies for distributing requests across backend workers. Each policy is designed for different use cases and can be configured based on your deployment requirements.
 
 ## Available Policies
 
@@ -26,10 +26,10 @@ The `consistent_hash` policy routes requests with the same session/user identifi
 
 ```bash
 # Using CLI
-vllm-router --policy consistent_hash --worker-urls http://worker1:8000,http://worker2:8000
+lmdeploy-router --policy consistent_hash --worker-urls http://worker1:8000,http://worker2:8000
 
 # Using Python
-from vllm_router import Router
+from lmdeploy_router import Router
 router = Router(
     policy="consistent_hash",
     worker_urls=["http://worker1:8000", "http://worker2:8000"]
@@ -123,7 +123,7 @@ The `round_robin` policy distributes requests evenly across all healthy workers 
 ### Configuration
 
 ```bash
-vllm-router --policy round_robin --worker-urls http://worker1:8000,http://worker2:8000
+lmdeploy-router --policy round_robin --worker-urls http://worker1:8000,http://worker2:8000
 ```
 
 ### Behavior
@@ -148,7 +148,7 @@ The `random` policy selects a random healthy worker for each request.
 ### Configuration
 
 ```bash
-vllm-router --policy random --worker-urls http://worker1:8000,http://worker2:8000
+lmdeploy-router --policy random --worker-urls http://worker1:8000,http://worker2:8000
 ```
 
 ### Behavior
@@ -172,7 +172,7 @@ The `power_of_two` policy randomly selects two workers and routes to the one wit
 ### Configuration
 
 ```bash
-vllm-router --policy power_of_two --worker-urls http://worker1:8000,http://worker2:8000,http://worker3:8000
+lmdeploy-router --policy power_of_two --worker-urls http://worker1:8000,http://worker2:8000,http://worker3:8000
 ```
 
 ### Behavior
@@ -200,7 +200,7 @@ The `cache_aware` policy optimizes for prefix caching by maintaining an approxim
 ### Configuration
 
 ```bash
-vllm-router --policy cache_aware \
+lmdeploy-router --policy cache_aware \
   --cache-threshold 0.5 \
   --balance-abs-threshold 32 \
   --balance-rel-threshold 1.1 \
@@ -231,7 +231,7 @@ vllm-router --policy cache_aware \
 ### Best For
 
 - Workloads with repeated prompt prefixes (system prompts, few-shot examples)
-- When prefix caching is enabled on vLLM workers
+- When prefix caching is enabled on backend workers
 - Multi-tenant deployments with distinct prompt patterns
 
 ---
@@ -282,7 +282,7 @@ vllm-router --policy cache_aware \
 In prefill-decode disaggregated mode, you can configure separate policies for prefill and decode workers:
 
 ```bash
-vllm-router \
+lmdeploy-router \
   --mode pd \
   --prefill-policy consistent_hash \
   --decode-policy round_robin \

@@ -68,10 +68,10 @@ pub struct RouterConfig {
     /// History backend configuration (memory or none, default: memory)
     #[serde(default = "default_history_backend")]
     pub history_backend: HistoryBackend,
-    /// Enable profiling calls to vLLM workers
+    /// Enable profiling calls to backend workers
     #[serde(default)]
     pub enable_profiling: bool,
-    /// Profiling timeout in seconds (for vLLM profiling endpoints)
+    /// Profiling timeout in seconds
     #[serde(default = "default_profile_timeout_secs")]
     pub profile_timeout_secs: u64,
     /// KV connector type for PD disaggregation

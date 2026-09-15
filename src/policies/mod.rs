@@ -1,4 +1,4 @@
-//! Load balancing policies for VLLM router
+//! Load balancing policies for the LMDeploy router
 //!
 //! This module provides a unified abstraction for routing policies that work
 //! across both regular and prefill-decode (PD) routing modes.
