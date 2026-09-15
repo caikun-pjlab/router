@@ -1,5 +1,6 @@
 import argparse
 import logging
+import os
 import sys
 from typing import List, Optional
 
@@ -30,6 +31,10 @@ def launch_router(args: argparse.Namespace) -> Optional[Router]:
         Router instance if successful, None if failed
     """
     setproctitle.setproctitle("lmdeploy::router")
+
+    packaged_router_bin = os.path.join(sys.prefix, "bin", "lmdeploy-router-bin")
+    if os.path.isfile(packaged_router_bin):
+        os.environ.setdefault("LMDPLOY_PYTHON_ROUTER_BIN", packaged_router_bin)
     try:
         # Convert to RouterArgs if needed
         if not isinstance(args, RouterArgs):

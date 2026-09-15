@@ -39,18 +39,40 @@ cargo build --release
 ```
 
 #### Python Package
-Install from PyPI
+Install from PyPI:
 ```bash
-pip install lmdeploy-router                                                                                                                                                        ```
+pip install lmdeploy-router
+```
 
-To build from source:
+Build a wheel from source. The package uses one release configuration at the
+repository root. It contains the Python launcher, the `lmdeploy_router_rs`
+PyO3 extension, and the standalone Rust binary as `lmdeploy-router-bin`.
+
 ```bash
-pip install setuptools-rust wheel build
-python -m build
-pip install dist/*.whl
+export CARGO_HOME="${CARGO_HOME:-/data/cargo-cache}"
+export CARGO_NET_OFFLINE=true
 
-# Rebuild & reinstall in one step during development
-python -m build && pip install --force-reinstall dist/*.whl
+python -m pip install -U pip
+python -m pip install 'build>=1.2' 'setuptools>=64' 'setuptools-rust>=1.5.2' wheel
+
+# Optional: if you already built the release binary, explicitly reuse it.
+export LMDEPLOY_ROUTER_BIN="${PWD}/target/release/lmdeploy-router"
+
+python -m build --wheel --outdir dist .
+```
+
+The output is an ABI3 Python wheel such as
+`dist/lmdeploy_router-0.0.3-cp38-abi3-linux_x86_64.whl`. The `cp38` prefix
+means it supports CPython 3.8 and newer through the stable ABI; it does not
+limit the wheel to Python 3.8 only.
+
+Install and verify it with:
+```bash
+python -m pip install --force-reinstall dist/lmdeploy_router-*.whl
+
+python -c 'import lmdeploy_router_rs, lmdeploy_router; print(lmdeploy_router.__version__)'
+lmdeploy-router-bin --version
+lmdeploy-router --help
 ```
 
 ### Usage Examples
