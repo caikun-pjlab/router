@@ -44,7 +44,7 @@ Install from PyPI
 pip install lmdeploy-router                                                                                                                                                        ```
 
 To build from source:
-```bash    
+```bash
 pip install setuptools-rust wheel build
 python -m build
 pip install dist/*.whl
@@ -57,24 +57,20 @@ python -m build && pip install --force-reinstall dist/*.whl
 
 #### Standard Data Parallelism Routing
 ```bash
-# Launch router with data parallelism (8 replicas per worker URL)
-# When data-parallel-size > 1, the router automatically creates DP-aware workers
+# Launch router with one worker per URL
 ./target/release/lmdeploy-router \
     --worker-urls http://worker1:8000 http://worker2:8000 \
-    --policy consistent_hash \
-    --intra-node-data-parallel-size 8
+    --policy consistent_hash
 
 # Alternative: using cargo run
 cargo run --release -- \
     --worker-urls http://worker1:8000 http://worker2:8000 \
-    --policy consistent_hash \
-    --intra-node-data-parallel-size 8
+    --policy consistent_hash
 
 # Alternative: using python launcher
 lmdeploy-router \
   --worker-urls http://worker1:8000 http://worker2:8000 \
-    --policy consistent_hash \
-    --intra-node-data-parallel-size 8
+    --policy consistent_hash
 ```
 
 #### Prefill-Decode Disaggregation
@@ -243,4 +239,4 @@ The continuous integration pipeline includes comprehensive testing, benchmarking
 
 ## Acknowledgement
 
-This project is a fork of [SGLang Model Gateway](https://github.com/sgl-project/sglang/tree/main/sgl-model-gateway), and we would like to explicitly acknowledge and thank the original authors for their work. At this stage, our fork includes only minimal changes to preserve the existing interface and ensure compatibility with LMDeploy. We anticipate further divergence as we pursue the roadmap we have in mind, which is the reason for creating the fork.
+This project is a fork of [vLLM Router](https://github.com/vllm-project/router), and we would like to explicitly acknowledge and thank the original authors for their work. At this stage, our fork includes only minimal changes to preserve the existing interface and ensure compatibility with LMDeploy. We anticipate further divergence as we pursue the roadmap we have in mind, which is the reason for creating the fork.

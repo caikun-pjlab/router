@@ -11,6 +11,7 @@ use crate::{
         worker_spec::{WorkerApiResponse, WorkerConfigRequest, WorkerErrorResponse},
     },
     routers::{
+        factory::LMDeployPDRouterParams,
         router_manager::{RouterId, RouterManager},
         RouterFactory, RouterTrait,
     },
@@ -1108,17 +1109,17 @@ pub async fn startup(config: ServerConfig) -> Result<(), Box<dyn std::error::Err
             }
 
             // 2. HTTP LMDeploy PD Router
-            match RouterFactory::create_lmdeploy_pd_router(
-                &[],
-                &[],
-                LMDeployMigrationProtocol::default(),
-                None,
-                false,
-                None,
-                None,
-                &config.router_config.policy,
-                &app_context,
-            )
+            match RouterFactory::create_lmdeploy_pd_router(LMDeployPDRouterParams {
+                prefill_urls: &[],
+                decode_urls: &[],
+                migration_protocol: LMDeployMigrationProtocol::default(),
+                rdma_config: None,
+                dummy_prefill: false,
+                prefill_policy_config: None,
+                decode_policy_config: None,
+                main_policy_config: &config.router_config.policy,
+                ctx: &app_context,
+            })
             .await
             {
                 Ok(http_pd) => {

@@ -4,10 +4,23 @@ use super::{
     http::{lmdeploy_pd_router::LMDeployPDRouter, openai_router::OpenAIRouter, router::Router},
     RouterTrait,
 };
-use crate::config::{PolicyConfig, RoutingMode};
+use crate::config::{LMDeployMigrationProtocol, LMDeployRdmaConfig, PolicyConfig, RoutingMode};
 use crate::policies::PolicyFactory;
 use crate::server::AppContext;
 use std::sync::Arc;
+
+/// Static inputs needed to build an LMDeploy PD router.
+pub struct LMDeployPDRouterParams<'a> {
+    pub prefill_urls: &'a [String],
+    pub decode_urls: &'a [String],
+    pub migration_protocol: LMDeployMigrationProtocol,
+    pub rdma_config: Option<LMDeployRdmaConfig>,
+    pub dummy_prefill: bool,
+    pub prefill_policy_config: Option<&'a PolicyConfig>,
+    pub decode_policy_config: Option<&'a PolicyConfig>,
+    pub main_policy_config: &'a PolicyConfig,
+    pub ctx: &'a Arc<AppContext>,
+}
 
 /// Factory for creating router instances based on configuration
 pub struct RouterFactory;
@@ -32,17 +45,17 @@ impl RouterFactory {
                     "Creating LMDeployPDRouter with prefill_urls: {:?}, decode_urls: {:?}, migration_protocol: {:?}",
                     prefill_urls, decode_urls, migration_protocol
                 );
-                Self::create_lmdeploy_pd_router(
+                Self::create_lmdeploy_pd_router(LMDeployPDRouterParams {
                     prefill_urls,
                     decode_urls,
-                    *migration_protocol,
-                    rdma_config.clone(),
-                    *dummy_prefill,
-                    prefill_policy.as_ref(),
-                    decode_policy.as_ref(),
-                    &ctx.router_config.policy,
+                    migration_protocol: *migration_protocol,
+                    rdma_config: rdma_config.clone(),
+                    dummy_prefill: *dummy_prefill,
+                    prefill_policy_config: prefill_policy.as_ref(),
+                    decode_policy_config: decode_policy.as_ref(),
+                    main_policy_config: &ctx.router_config.policy,
                     ctx,
-                )
+                })
                 .await
             }
             RoutingMode::OpenAI { worker_urls, .. } => {
@@ -64,16 +77,19 @@ impl RouterFactory {
 
     /// Create an LMD (lmdeploy) PD router with static URLs
     pub async fn create_lmdeploy_pd_router(
-        prefill_urls: &[String],
-        decode_urls: &[String],
-        migration_protocol: crate::config::LMDeployMigrationProtocol,
-        rdma_config: Option<crate::config::LMDeployRdmaConfig>,
-        dummy_prefill: bool,
-        prefill_policy_config: Option<&PolicyConfig>,
-        decode_policy_config: Option<&PolicyConfig>,
-        main_policy_config: &PolicyConfig,
-        ctx: &Arc<AppContext>,
+        params: LMDeployPDRouterParams<'_>,
     ) -> Result<Box<dyn RouterTrait>, String> {
+        let LMDeployPDRouterParams {
+            prefill_urls,
+            decode_urls,
+            migration_protocol,
+            rdma_config,
+            dummy_prefill,
+            prefill_policy_config,
+            decode_policy_config,
+            main_policy_config,
+            ctx,
+        } = params;
         let prefill_policy =
             PolicyFactory::create_from_config(prefill_policy_config.unwrap_or(main_policy_config));
         let decode_policy =

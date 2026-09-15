@@ -33,6 +33,9 @@ use tokio::sync::OnceCell;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
+type P2pKey = (String, String);
+type P2pConnectionCell = Arc<OnceCell<()>>;
+
 /// lmdeploy PD Router that extends PdRouterBase with lmdeploy-specific request handling
 #[derive(Debug)]
 pub struct LMDeployPDRouter {
@@ -49,7 +52,7 @@ pub struct LMDeployPDRouter {
     /// Whether to use dummy prefill
     dummy_prefill: bool,
     /// Per-pair, single-flight P2P connection initialization.
-    p2p_pool: Arc<DashMap<(String, String), Arc<OnceCell<()>>>>,
+    p2p_pool: Arc<DashMap<P2pKey, P2pConnectionCell>>,
 }
 
 /// Releases a preserved prefill session if the request exits before a successful
@@ -580,7 +583,7 @@ impl LMDeployPDRouter {
     }
 
     async fn invalidate_worker_connections_and_drop(&self, worker_url: &str) {
-        let keys: Vec<(String, String)> = self
+        let keys: Vec<P2pKey> = self
             .p2p_pool
             .iter()
             .filter(|entry| {

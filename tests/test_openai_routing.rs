@@ -362,12 +362,11 @@ async fn test_openai_router_circuit_breaker() {
         window_duration_secs: 10,
     };
 
-    let router = OpenAIRouter::new(
-        "http://invalid-url-that-will-fail".to_string(),
-        Some(cb_config),
-    )
-    .await
-    .unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base_url = format!("http://{}", listener.local_addr().unwrap());
+    drop(listener);
+
+    let router = OpenAIRouter::new(base_url, Some(cb_config)).await.unwrap();
 
     let chat_request = create_minimal_chat_request();
 
