@@ -16,6 +16,10 @@ class RouterArgs:
     # PD-specific configuration
     mini_lb: bool = False
     lmdeploy_pd_disaggregation: bool = False
+    lmdeploy_migration_protocol: str = "rdma"
+    lmdeploy_rdma_link_type: str = "roce"
+    lmdeploy_disable_gdr: bool = False
+    lmdeploy_dummy_prefill: bool = False
     prefill_urls: List[str] = dataclasses.field(default_factory=list)
     decode_urls: List[str] = dataclasses.field(default_factory=list)
 
@@ -172,6 +176,30 @@ class RouterArgs:
             f"--{prefix}lmdeploy-pd-disaggregation",
             action="store_true",
             help="Enable LMDeploy PD (Prefill-Decode) disaggregated mode",
+        )
+        parser.add_argument(
+            f"--{prefix}lmdeploy-migration-protocol",
+            type=str,
+            default=RouterArgs.lmdeploy_migration_protocol,
+            choices=["rdma", "nvlink"],
+            help="Migration protocol for LMDeploy PD disaggregation",
+        )
+        parser.add_argument(
+            f"--{prefix}lmdeploy-rdma-link-type",
+            type=str,
+            default=RouterArgs.lmdeploy_rdma_link_type,
+            choices=["ib", "roce"],
+            help="RDMA link type for LMDeploy PD disaggregation (used when migration protocol is rdma)",
+        )
+        parser.add_argument(
+            f"--{prefix}lmdeploy-disable-gdr",
+            action="store_true",
+            help="Disable GPU Direct RDMA for LMDeploy PD disaggregation",
+        )
+        parser.add_argument(
+            f"--{prefix}lmdeploy-dummy-prefill",
+            action="store_true",
+            help="Use dummy prefill for LMDeploy PD disaggregation",
         )
         parser.add_argument(
             f"--{prefix}prefill",

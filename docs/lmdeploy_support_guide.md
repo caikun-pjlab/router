@@ -736,82 +736,54 @@ pytest -v py_test/integration/lmdeploy
 
 ### 10.1 打包方式
 
-`lmdeploy-router` 是 Rust 可执行程序，使用 Maturin 的 `bin` 模式打包；专用配置位于
-`packaging/lmdeploy-router/pyproject.toml`。该产物只提供 CLI，不包含 Python 扩展模块。
+`lmdeploy-router` 由仓库根目录的 `pyproject.toml` 与 `setup.py` 通过 setuptools-rust 打包
+成一个 wheel（与上游 vllm-router 的打包方式一致）。该 wheel 同时包含三部分：
 
-Cargo 的默认 `python` feature 保留了原有 PyO3 扩展构建行为；专用 wheel 配置通过
-`no-default-features = true` 关闭该 feature。Maturin 因而只打包 `[[bin]]` 定义的
-`lmdeploy-router` 可执行程序，而不是可被 Python `import` 的扩展模块。安装 wheel 后，
-可执行程序会被安装到当前 Python 环境的 `bin/` 目录中。
+- `lmdeploy_router_rs`：PyO3 扩展模块（`src/lib.rs`），提供 `PolicyType` 与 `Router`。
+- `lmdeploy_router`：纯 Python 包（`py_src/lmdeploy_router/`），提供 `RouterArgs`、
+  `launch_router` 和 MiniLB。
+- `lmdeploy-router`：入口命令，等价于 `python -m lmdeploy_router.launch_router`。
 
-当前 wheel 元数据限制 Python 版本为 `>=3.10,<3.13`，同时二进制不使用 CPython ABI，因此同一
-个 Linux/CPU 架构的 `py3-none` wheel 可以覆盖 Python 3.10、3.11 和 3.12，无需按 Python
-小版本分别编译。不同操作系统或 CPU 架构仍然需要分别构建，例如 Linux x86_64 与 Linux
-aarch64 需要两个 wheel。
+因此安装同一个 wheel 之后，既可以 `import lmdeploy_router_rs`，也可以直接运行
+`lmdeploy-router` 命令；二者参数完全一致。PyO3 扩展按 abi3 构建
+（`py_limited_api = "cp38"`），同一个 `cp38-abi3` wheel 可用于 CPython 3.8 及以上版本。
+不同操作系统或 CPU 架构仍需分别构建。
 
 ### 10.2 构建 wheel
 
-正式发布的 Linux wheel 推荐在 Maturin 官方 manylinux2014 容器中构建。以下命令从 Router
-仓库根目录执行：
-
 ```bash
-# pyo3/maturin 镜像基于 manylinux2014；容器入口即 maturin
-docker run --rm \
-  -v "$(pwd):/io" \
-  -w /io/packaging/lmdeploy-router \
-  ghcr.io/pyo3/maturin \
-  build --release --out /io/dist
+python -m pip install build 'setuptools-rust>=1.5.2'
+python -m build --wheel --outdir dist .
 ```
 
-产物统一放在仓库根目录的 `dist/` 中，例如：
+产物统一放在仓库根目录的 `dist/` 中：
 
 ```text
-dist/lmdeploy_router-0.0.1-py3-none-manylinux_2_17_x86_64.whl
+dist/lmdeploy_router-0.0.3-cp38-abi3-linux_x86_64.whl
 ```
 
-若只需验证当前构建机或与其 glibc 兼容的目标容器，可以不使用 Docker，并显式将平台标签
-覆盖为 `linux`：
+Rust 依赖较多，首次构建需要数分钟；通过 `CARGO_HOME` 复用缓存可以显著加速。`dist/` 已加入
+`.gitignore`，适合作为本地或 CI 构建产物目录。正式发布时应将 wheel 上传到内部 PyPI、
+制品库或 Release，而不是提交进 Git。wheel 文件名遵循 Python Wheel 规范，不要将其重命名为
+`lmdeploy-router.whl`；pip 会校验文件名中的包名、版本和兼容性标签。
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install 'maturin>=1.8,<2.0'
-
-cd packaging/lmdeploy-router
-maturin build --release --compatibility linux --out ../../dist
-cd ../..
-```
-
-此时产物名类似 `lmdeploy_router-0.0.1-py3-none-linux_x86_64.whl`。它适合在相同或经验证
-兼容的机器上部署，但不应作为面向任意 Linux 发行版的通用产物。若直接在较新的宿主机上
-使用默认 `manylinux2014` 配置，Maturin 可能因二进制引用了较新的 glibc/libstdc++ 符号而
-拒绝错误标记；此时应改用上述 manylinux 容器构建，而不是跳过兼容性检查。
-
-`dist/` 已加入 `.gitignore`，适合作为本地或 CI 构建产物目录。正式发布时应将 wheel 上传到
-内部 PyPI、制品库或 Release，而不是提交进 Git。wheel 文件名遵循 Python Wheel 规范，
-不要将其重命名为 `lmdeploy-router.whl`；pip 会校验文件名中的包名、版本和兼容性标签。
-
-`lmdeploy-router` 使用独立版本线，初始版本为 `0.0.1`；`packaging/lmdeploy-router/pyproject.toml`
-与 `Cargo.toml` 中的版本必须保持一致。仓库根目录 `pyproject.toml` 和
-`py_src/lmdeploy_router/version.py` 属于当前扩展包配置，打包二进制 wheel 时不会使用它们。
+`pyproject.toml`、`Cargo.toml` 与 `py_src/lmdeploy_router/version.py` 的版本号必须保持一致。
 
 ### 10.3 安装与使用
 
 在目标 Python 环境中安装构建出的 wheel：
 
 ```bash
-python -m pip install ./dist/lmdeploy_router-0.0.1-py3-none-manylinux_2_17_x86_64.whl
+python -m pip install ./dist/lmdeploy_router-0.0.3-cp38-abi3-linux_x86_64.whl
 lmdeploy-router --help
+python -c "from lmdeploy_router_rs import PolicyType; print(PolicyType)"
 ```
 
-如果 wheel 位于当前目录，可直接使用真实文件名安装：
-
-```bash
-python -m pip install ./lmdeploy_router-0.0.1-py3-none-manylinux_2_17_x86_64.whl
-```
-
-安装完成后，启动参数与直接运行 Cargo release 二进制完全相同。例如先启动 Router、等待
-LMDeploy 服务通过 `--proxy-url` 动态注册：
+入口命令走的是 Python `RouterArgs`，它与 Rust CLI 接受同一套 PD 参数：
+`--lmdeploy-pd-disaggregation`、`--lmdeploy-migration-protocol`、
+`--lmdeploy-rdma-link-type`、`--lmdeploy-disable-gdr` 和 `--lmdeploy-dummy-prefill`。
+启动参数与直接运行 Cargo release 二进制完全相同，例如先启动 Router、等待 LMDeploy 服务
+通过 `--proxy-url` 动态注册：
 
 ```bash
 lmdeploy-router \
@@ -822,12 +794,12 @@ lmdeploy-router \
   --lmdeploy-rdma-link-type roce
 ```
 
-### 10.4 验证 Python 3.10～3.12
+### 10.4 验证多 Python 版本
 
-准备好三个 Python 解释器后，可以用同一个 wheel 分别创建环境并检查命令：
+扩展为 abi3，同一个 wheel 可直接安装在 CPython 3.8 及以上的环境中：
 
 ```bash
-WHEEL=dist/lmdeploy_router-0.0.1-py3-none-manylinux_2_17_x86_64.whl
+WHEEL=dist/lmdeploy_router-0.0.3-cp38-abi3-linux_x86_64.whl
 
 for PYTHON in python3.10 python3.11 python3.12; do
   ENV_DIR=".test-artifacts/wheel/${PYTHON}"
@@ -837,8 +809,8 @@ for PYTHON in python3.10 python3.11 python3.12; do
 done
 ```
 
-除上述安装检查外，发布流水线还应在目标 Linux 发行版上运行一次真实的 Router 启动和请求
-转发测试。`manylinux2014` 标签保证的是 Linux 基础系统兼容范围，不代替运行时功能验证。
+除安装检查外，发布流水线还应在目标 Linux 发行版上运行一次真实的 Router 启动和请求
+转发测试。wheel 的平台标签保证的是 Linux 基础系统兼容范围，不代替运行时功能验证。
 
 ### 10.5 在 caikun-lmdeploy 容器中验收
 
@@ -881,5 +853,6 @@ ssh "ailab@${TARGET}" \
 | `py_test/integration/lmdeploy/test_load_balancing.py` | 五种 LB 策略测试 |
 | `py_test/integration/lmdeploy/test_rest_api.py` | 28 项 LMDeploy REST 适配测试 |
 | `py_test/integration/lmdeploy/test_registration.py` | Hybrid/PD 动态注册测试 |
-| `packaging/lmdeploy-router/pyproject.toml` | `lmdeploy-router` 独立二进制 wheel 的 Maturin 配置 |
+| `pyproject.toml` + `setup.py` | Python wheel 打包配置（setuptools-rust） |
+| `py_src/lmdeploy_router/` | Python 包：`RouterArgs`、`launch_router`、MiniLB |
 | `${CARGO_TARGET_DIR}/release/lmdeploy-router` | 编译产物（release 二进制） |

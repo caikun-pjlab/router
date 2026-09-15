@@ -134,6 +134,8 @@ class Router:
 
         # remove mini_lb parameter
         args_dict.pop("mini_lb")
+        # Rust exposes lmdeploy_with_gdr; the CLI flag disables it
+        args_dict["lmdeploy_with_gdr"] = not args_dict.pop("lmdeploy_disable_gdr")
 
         return Router(router=_Router(**args_dict))
 
