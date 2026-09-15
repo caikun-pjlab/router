@@ -61,11 +61,6 @@ export LMDEPLOY_ROUTER_BIN="${PWD}/target/release/lmdeploy-router"
 python -m build --wheel --outdir dist .
 ```
 
-The output is an ABI3 Python wheel such as
-`dist/lmdeploy_router-0.0.3-cp38-abi3-linux_x86_64.whl`. The `cp38` prefix
-means it supports CPython 3.8 and newer through the stable ABI; it does not
-limit the wheel to Python 3.8 only.
-
 Install and verify it with:
 ```bash
 python -m pip install --force-reinstall dist/lmdeploy_router-*.whl
