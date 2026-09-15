@@ -66,9 +66,6 @@ fn create_minimal_completion_request() -> CompletionRequest {
         no_stop_trim: false,
         ignore_eos: false,
         skip_special_tokens: true,
-        lora_path: None,
-        session_params: None,
-        return_hidden_states: false,
         other: serde_json::Map::new(),
     }
 }
@@ -192,9 +189,6 @@ async fn test_unsupported_endpoints() {
         sampling_params: None,
         stream: false,
         return_logprob: false,
-        lora_path: None,
-        session_params: None,
-        return_hidden_states: false,
         rid: None,
         other: serde_json::Map::new(),
     };

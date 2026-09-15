@@ -42,11 +42,11 @@ mod consistent_hash_policy_tests {
 
         let session_id = "test_session_123";
 
-        // Make multiple requests with the same session_id in session_params
+        // Make multiple requests with the same top-level session_id
         let mut selected_workers = Vec::new();
         for i in 0..10 {
             let prompt = format!(
-                r#"{{"session_params": {{"session_id": "{}"}}, "prompt": "request {}}}"#,
+                r#"{{"session_id": "{}", "prompt": "request {}}}"#,
                 session_id, i
             );
             if let Some(worker_idx) = policy.select_worker(&workers, Some(&prompt)) {
@@ -81,10 +81,7 @@ mod consistent_hash_policy_tests {
         // Create many different sessions and see how they distribute
         for i in 0..num_sessions {
             let session_id = format!("session_{}", i);
-            let request_json = format!(
-                r#"{{"session_params": {{"session_id": "{}"}}, "prompt": "test"}}"#,
-                session_id
-            );
+            let request_json = format!(r#"{{"session_id": "{}", "prompt": "test"}}"#, session_id);
 
             if let Some(worker_idx) = policy.select_worker(&workers, Some(&request_json)) {
                 *worker_counts.entry(worker_idx).or_insert(0) += 1;
@@ -125,10 +122,7 @@ mod consistent_hash_policy_tests {
         let decode_workers = create_test_workers();
 
         let session_id = "pd_session_test";
-        let request_json = format!(
-            r#"{{"session_params": {{"session_id": "{}"}}, "prompt": "pd test"}}"#,
-            session_id
-        );
+        let request_json = format!(r#"{{"session_id": "{}", "prompt": "pd test"}}"#, session_id);
 
         // Test PD mode worker pair selection
         if let Some((prefill_idx, decode_idx)) =
@@ -213,7 +207,7 @@ mod consistent_hash_policy_tests {
             // Make 5 requests per session
             for i in 0..5 {
                 let request = format!(
-                    r#"{{"session_params": {{"session_id": "{}"}}, "prompt": "request {}}}"#,
+                    r#"{{"session_id": "{}", "prompt": "request {}}}"#,
                     session, i
                 );
                 if let Some(idx) = policy.select_worker(&workers, Some(&request)) {
@@ -277,8 +271,7 @@ mod consistent_hash_policy_tests {
         }
     }
 
-    // NOTE: Removed test_session_params_user_id_consistency because user_id should NOT go in session_params
-    // Only session_id goes in session_params. User info goes in top-level "user" field per OpenAI spec.
+    // Session IDs use the top-level field; user identity uses the `user` field.
 
     #[test]
     fn test_openai_user_field_consistency() {
@@ -320,11 +313,11 @@ mod consistent_hash_policy_tests {
         let session_id = "priority_session";
         let user_id = "priority_user";
 
-        // Make requests with both session_id and user_id in session_params
+        // Make requests with both session_id and user_id
         let mut selected_workers = Vec::new();
         for i in 0..3 {
             let prompt = format!(
-                r#"{{"session_params": {{"session_id": "{}", "user_id": "{}"}}, "prompt": "request {}}}"#,
+                r#"{{"session_id": "{}", "user_id": "{}", "prompt": "request {}}}"#,
                 session_id, user_id, i
             );
             if let Some(worker_idx) = policy.select_worker(&workers, Some(&prompt)) {
@@ -368,20 +361,14 @@ mod consistent_hash_policy_tests {
 
         let session_id = "format_test_session";
 
-        // Test different JSON formats that should all extract the same session_id from session_params
+        // Test different JSON formats that should all extract the same session_id
         let formats = [
+            format!(r#"{{"session_id": "{}", "prompt": "test"}}"#, session_id),
             format!(
-                r#"{{"session_params": {{"session_id": "{}"}}, "prompt": "test"}}"#,
+                r#"{{ "session_id" : "{}" , "prompt" : "test" }}"#,
                 session_id
             ),
-            format!(
-                r#"{{ "session_params" : {{ "session_id" : "{}" }} , "prompt" : "test" }}"#,
-                session_id
-            ),
-            format!(
-                r#"{{"prompt": "test", "session_params": {{"session_id": "{}"}}}}"#,
-                session_id
-            ),
+            format!(r#"{{"prompt": "test", "session_id": "{}"}}"#, session_id),
         ];
 
         let mut selected_workers = Vec::new();
@@ -461,10 +448,7 @@ mod consistent_hash_policy_tests {
         let body_session = "body-session-ignored";
 
         let headers = create_headers(&[("x-session-id", header_session)]);
-        let body = format!(
-            r#"{{"session_params": {{"session_id": "{}"}}, "prompt": "test"}}"#,
-            body_session
-        );
+        let body = format!(r#"{{"session_id": "{}", "prompt": "test"}}"#, body_session);
 
         // Get worker for header-only request
         let header_only_headers = create_headers(&[("x-session-id", header_session)]);
@@ -480,7 +464,7 @@ mod consistent_hash_policy_tests {
         // Both should route to the same worker (header takes priority)
         assert_eq!(
             header_only_worker, both_worker,
-            "HTTP header should take priority over body session_params"
+            "HTTP header should take priority over body session_id"
         );
     }
 
@@ -560,10 +544,7 @@ mod consistent_hash_policy_tests {
         let workers = create_test_workers();
 
         let body_session = "body-only-session";
-        let body = format!(
-            r#"{{"session_params": {{"session_id": "{}"}}, "prompt": "test"}}"#,
-            body_session
-        );
+        let body = format!(r#"{{"session_id": "{}", "prompt": "test"}}"#, body_session);
 
         // Empty headers should fall back to body
         let empty_headers: RequestHeaders = HashMap::new();

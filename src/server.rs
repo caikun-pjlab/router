@@ -7,10 +7,7 @@ use crate::{
     middleware::{self, QueuedRequest, TokenBucket},
     policies::PolicyRegistry,
     protocols::{
-        spec::{
-            ChatCompletionRequest, CompletionRequest, EmbeddingRequest, GenerateRequest,
-            InferenceGenerateRequest, RerankRequest, V1RerankReqInput,
-        },
+        spec::{ChatCompletionRequest, CompletionRequest, EmbeddingRequest, GenerateRequest},
         worker_spec::{WorkerApiResponse, WorkerConfigRequest, WorkerErrorResponse},
     },
     routers::{
@@ -276,21 +273,6 @@ async fn generate(
         .await
 }
 
-async fn inference_generate(
-    State(state): State<Arc<AppState>>,
-    headers: http::HeaderMap,
-    Json(body): Json<InferenceGenerateRequest>,
-) -> Response {
-    if let Err(response) = authorize_request(&state, &headers).await {
-        return response;
-    }
-
-    state
-        .router
-        .route_inference_generate(Some(&headers), &body, None)
-        .await
-}
-
 async fn v1_chat_completions(
     State(state): State<Arc<AppState>>,
     headers: http::HeaderMap,
@@ -315,33 +297,6 @@ async fn v1_completions(
     state
         .router
         .route_completion(Some(&headers), &body, None)
-        .await
-}
-
-async fn rerank(
-    State(state): State<Arc<AppState>>,
-    headers: http::HeaderMap,
-    Json(body): Json<RerankRequest>,
-) -> Response {
-    if let Err(response) = authorize_request(&state, &headers).await {
-        return response;
-    }
-
-    state.router.route_rerank(Some(&headers), &body, None).await
-}
-
-async fn v1_rerank(
-    State(state): State<Arc<AppState>>,
-    headers: http::HeaderMap,
-    Json(body): Json<V1RerankReqInput>,
-) -> Response {
-    if let Err(response) = authorize_request(&state, &headers).await {
-        return response;
-    }
-
-    state
-        .router
-        .route_rerank(Some(&headers), &body.into(), None)
         .await
 }
 
@@ -961,11 +916,8 @@ pub fn build_app_with_request_tracing(
     // Create routes
     let protected_routes = Router::new()
         .route("/generate", post(generate))
-        .route("/inference/v1/generate", post(inference_generate))
         .route("/v1/chat/completions", post(v1_chat_completions))
         .route("/v1/completions", post(v1_completions))
-        .route("/rerank", post(rerank))
-        .route("/v1/rerank", post(v1_rerank))
         .route("/v1/responses", post(v1_responses))
         .route("/v1/embeddings", post(v1_embeddings))
         .route("/v1/responses/{response_id}", get(v1_responses_get))
@@ -1065,7 +1017,7 @@ pub async fn startup(config: ServerConfig) -> Result<(), Box<dyn std::error::Err
                 json_format: false,
                 log_dir: config.log_dir.clone(),
                 colorize: true,
-                log_file_name: "vllm-router".to_string(),
+                log_file_name: "lmdeploy-router".to_string(),
                 log_targets: None,
             },
             config.trace_config.clone(),

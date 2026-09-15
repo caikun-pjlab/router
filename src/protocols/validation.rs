@@ -32,15 +32,15 @@ pub mod constants {
     /// Maximum number of stop sequences allowed
     pub const MAX_STOP_SEQUENCES: usize = 4;
 
-    /// VLLM-specific validation constants
-    pub mod vllm {
-        /// Min-p range: 0.0 to 1.0 (VLLM extension)
+    /// Generation extension validation constants
+    pub mod generation_extensions {
+        /// Min-p range: 0.0 to 1.0
         pub const MIN_P_RANGE: (f32, f32) = (0.0, 1.0);
 
         /// Top-k minimum value: -1 to disable, otherwise positive
         pub const TOP_K_MIN: i32 = -1;
 
-        /// Repetition penalty range: 0.0 to 2.0 (VLLM extension)
+        /// Repetition penalty range: 0.0 to 2.0
         /// 1.0 = no penalty, >1.0 = discourage repetition, <1.0 = encourage repetition
         pub const REPETITION_PENALTY_RANGE: (f32, f32) = (0.0, 2.0);
     }
@@ -208,9 +208,9 @@ pub mod utils {
             })
     }
 
-    /// Validate top_k parameter (VLLM extension)
+    /// Validate top_k parameter
     pub fn validate_top_k(top_k: i32) -> Result<i32, ValidationError> {
-        if top_k == constants::vllm::TOP_K_MIN || top_k > 0 {
+        if top_k == constants::generation_extensions::TOP_K_MIN || top_k > 0 {
             Ok(top_k)
         } else {
             Err(ValidationError::InvalidValue {
@@ -298,7 +298,7 @@ pub mod utils {
             validate_positive(max_tokens, "max_tokens")?;
         }
 
-        // Validate min_tokens if provided (VLLM extension)
+        // Validate min_tokens if provided
         if let Some(min_tokens) = request.get_min_tokens() {
             validate_positive(min_tokens, "min_tokens")?;
         }
@@ -376,8 +376,8 @@ pub mod utils {
         Ok(())
     }
 
-    /// Generic validation for VLLM extensions
-    pub fn validate_vllm_extensions<T: VLLMExtensionsProvider + ?Sized>(
+    /// Generic validation for generation extensions
+    pub fn validate_generation_extensions<T: GenerationExtensionsProvider + ?Sized>(
         request: &T,
     ) -> Result<(), ValidationError> {
         // Validate top_k (-1 to disable, or positive)
@@ -387,14 +387,18 @@ pub mod utils {
 
         // Validate min_p (0.0 to 1.0)
         if let Some(min_p) = request.get_min_p() {
-            validate_range(min_p, &constants::vllm::MIN_P_RANGE, "min_p")?;
+            validate_range(
+                min_p,
+                &constants::generation_extensions::MIN_P_RANGE,
+                "min_p",
+            )?;
         }
 
         // Validate repetition_penalty (0.0 to 2.0)
         if let Some(rep_penalty) = request.get_repetition_penalty() {
             validate_range(
                 rep_penalty,
-                &constants::vllm::REPETITION_PENALTY_RANGE,
+                &constants::generation_extensions::REPETITION_PENALTY_RANGE,
                 "repetition_penalty",
             )?;
         }
@@ -435,7 +439,7 @@ pub mod utils {
             + StopConditionsProvider
             + TokenLimitsProvider
             + LogProbsProvider
-            + VLLMExtensionsProvider
+            + GenerationExtensionsProvider
             + CompletionCountProvider
             + ?Sized,
     {
@@ -445,8 +449,8 @@ pub mod utils {
         validate_token_limits(request)?;
         validate_logprobs(request)?;
 
-        // Validate VLLM extensions and completion count
-        validate_vllm_extensions(request)?;
+        // Validate generation extensions and completion count
+        validate_generation_extensions(request)?;
         validate_completion_count(request)?;
 
         // Perform cross-parameter validation
@@ -482,7 +486,7 @@ pub trait TokenLimitsProvider {
     /// Get maximum tokens parameter
     fn get_max_tokens(&self) -> Option<u32>;
 
-    /// Get minimum tokens parameter (VLLM extension)
+    /// Get minimum tokens parameter
     fn get_min_tokens(&self) -> Option<u32>;
 }
 
@@ -495,8 +499,8 @@ pub trait LogProbsProvider {
     fn get_top_logprobs(&self) -> Option<u32>;
 }
 
-/// Trait for VLLM-specific extensions
-pub trait VLLMExtensionsProvider {
+/// Trait for generation extensions
+pub trait GenerationExtensionsProvider {
     /// Get top_k parameter
     fn get_top_k(&self) -> Option<i32> {
         None
@@ -527,7 +531,7 @@ pub trait ValidatableRequest:
     + StopConditionsProvider
     + TokenLimitsProvider
     + LogProbsProvider
-    + VLLMExtensionsProvider
+    + GenerationExtensionsProvider
     + CompletionCountProvider
 {
     /// Perform comprehensive validation of the entire request
@@ -588,7 +592,7 @@ impl LogProbsProvider for ChatCompletionRequest {
     }
 }
 
-impl VLLMExtensionsProvider for ChatCompletionRequest {
+impl GenerationExtensionsProvider for ChatCompletionRequest {
     fn get_top_k(&self) -> Option<i32> {
         self.top_k
     }
@@ -829,7 +833,7 @@ mod tests {
         }
     }
 
-    impl VLLMExtensionsProvider for MockRequest {}
+    impl GenerationExtensionsProvider for MockRequest {}
     impl CompletionCountProvider for MockRequest {}
     impl ValidatableRequest for MockRequest {}
 
@@ -843,7 +847,7 @@ mod tests {
     }
 
     #[test]
-    fn test_vllm_top_k_validation() {
+    fn test_generation_top_k_validation() {
         assert!(validate_top_k(-1).is_ok()); // Disabled
         assert!(validate_top_k(50).is_ok()); // Valid positive
         assert!(validate_top_k(0).is_err()); // Invalid
@@ -922,7 +926,7 @@ mod tests {
                 parallel_tool_calls: None,
                 functions: None,
                 function_call: None,
-                // VLLM extensions
+                // Generation extensions
                 top_k: None,
                 min_p: None,
                 min_tokens: None,
@@ -938,12 +942,9 @@ mod tests {
                 add_generation_prompt: true,
                 continue_final_message: false,
                 skip_special_tokens: true,
-                lora_path: None,
-                session_params: None,
                 separate_reasoning: true,
                 stream_reasoning: true,
                 chat_template_kwargs: None,
-                return_hidden_states: false,
                 structured_outputs: None,
                 other: Default::default(),
             }
@@ -1000,10 +1001,10 @@ mod tests {
         }
 
         #[test]
-        fn test_vllm_extensions() {
+        fn test_generation_extensions() {
             let mut request = create_valid_chat_request();
 
-            // Valid VLLM parameters
+            // Valid generation extension parameters
             request.top_k = Some(-1);
             request.min_p = Some(0.1);
             request.repetition_penalty = Some(1.2);

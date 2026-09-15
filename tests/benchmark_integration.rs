@@ -20,10 +20,6 @@ fn default_generate_request() -> GenerateRequest {
         parameters: None,
         sampling_params: None,
         return_logprob: false,
-        // vLLM Extensions
-        lora_path: None,
-        session_params: None,
-        return_hidden_states: false,
         rid: None,
         other: serde_json::Map::new(),
     }
@@ -57,7 +53,7 @@ fn default_chat_completion_request() -> ChatCompletionRequest {
         function_call: None,
         functions: None,
         chat_template_kwargs: None,
-        // vLLM Extensions
+        // Generation extensions
         top_k: None,
         min_p: None,
         min_tokens: None,
@@ -70,12 +66,8 @@ fn default_chat_completion_request() -> ChatCompletionRequest {
         add_generation_prompt: true,
         continue_final_message: false,
         skip_special_tokens: true,
-        // vLLM Extensions
-        lora_path: None,
-        session_params: None,
         separate_reasoning: true,
         stream_reasoning: true,
-        return_hidden_states: false,
         echo: None,
         reasoning_effort: None,
         include_reasoning: true,
@@ -105,7 +97,7 @@ fn default_completion_request() -> CompletionRequest {
         logit_bias: None,
         user: None,
         seed: None,
-        // vLLM Extensions
+        // Generation extensions
         top_k: None,
         min_p: None,
         min_tokens: None,
@@ -117,10 +109,6 @@ fn default_completion_request() -> CompletionRequest {
         no_stop_trim: false,
         ignore_eos: false,
         skip_special_tokens: true,
-        // vLLM Extensions
-        lora_path: None,
-        session_params: None,
-        return_hidden_states: false,
         other: serde_json::Map::new(),
     }
 }

@@ -3,10 +3,7 @@
 use crate::config::CircuitBreakerConfig;
 use crate::core::{CircuitBreaker, CircuitBreakerConfig as CoreCircuitBreakerConfig};
 use crate::otel_http::{self, ClientRequestOptions};
-use crate::protocols::spec::{
-    ChatCompletionRequest, CompletionRequest, GenerateRequest, InferenceGenerateRequest,
-    RerankRequest,
-};
+use crate::protocols::spec::{ChatCompletionRequest, CompletionRequest, GenerateRequest};
 use async_trait::async_trait;
 use axum::{
     body::Body,
@@ -210,19 +207,6 @@ impl super::super::RouterTrait for OpenAIRouter {
             .into_response()
     }
 
-    async fn route_inference_generate(
-        &self,
-        _headers: Option<&HeaderMap>,
-        _body: &InferenceGenerateRequest,
-        _model_id: Option<&str>,
-    ) -> Response {
-        (
-            StatusCode::NOT_IMPLEMENTED,
-            "Generate endpoint not supported for OpenAI backend",
-        )
-            .into_response()
-    }
-
     async fn route_chat(
         &self,
         headers: Option<&HeaderMap>,
@@ -256,12 +240,9 @@ impl super::super::RouterTrait for OpenAIRouter {
                 "ignore_eos",
                 "continue_final_message",
                 "skip_special_tokens",
-                "lora_path",
-                "session_params",
                 "separate_reasoning",
                 "stream_reasoning",
                 "chat_template_kwargs",
-                "return_hidden_states",
                 "repetition_penalty",
             ] {
                 obj.remove(key);
@@ -442,19 +423,6 @@ impl super::super::RouterTrait for OpenAIRouter {
         (
             StatusCode::NOT_IMPLEMENTED,
             "Embeddings endpoint not implemented for OpenAI backend",
-        )
-            .into_response()
-    }
-
-    async fn route_rerank(
-        &self,
-        _headers: Option<&HeaderMap>,
-        _body: &RerankRequest,
-        _model_id: Option<&str>,
-    ) -> Response {
-        (
-            StatusCode::NOT_IMPLEMENTED,
-            "Rerank endpoint not implemented for OpenAI backend",
         )
             .into_response()
     }

@@ -77,7 +77,7 @@ pub fn prepare_client_request(
             url.full = %options.url,
             server.address = Empty,
             server.port = Empty,
-            vllm.request_phase = Empty,
+            inference.request_phase = Empty,
             http.response.status_code = Empty,
             error = Empty,
         );
@@ -86,7 +86,7 @@ pub fn prepare_client_request(
             span.record("http.route", route);
         }
         if let Some(request_phase) = options.request_phase {
-            span.record("vllm.request_phase", request_phase);
+            span.record("inference.request_phase", request_phase);
         }
         record_server_address(&span, options.url);
 

@@ -7,8 +7,7 @@
 use crate::config::RouterConfig;
 use crate::core::{CircuitBreakerConfig, Worker, WorkerFactory, WorkerRegistry, WorkerType};
 use crate::protocols::spec::{
-    ChatCompletionRequest, CompletionRequest, EmbeddingRequest, GenerateRequest,
-    InferenceGenerateRequest, RerankRequest, ResponsesRequest,
+    ChatCompletionRequest, CompletionRequest, EmbeddingRequest, GenerateRequest, ResponsesRequest,
 };
 use crate::protocols::worker_spec::{
     ServerInfo, WorkerApiResponse, WorkerConfigRequest, WorkerErrorResponse, WorkerInfo,
@@ -567,25 +566,6 @@ impl RouterTrait for RouterManager {
         }
     }
 
-    async fn route_inference_generate(
-        &self,
-        headers: Option<&HeaderMap>,
-        body: &InferenceGenerateRequest,
-        _model_id: Option<&str>,
-    ) -> Response {
-        let router = self.select_router_for_request(headers, None);
-
-        if let Some(router) = router {
-            router.route_inference_generate(headers, body, None).await
-        } else {
-            (
-                StatusCode::NOT_FOUND,
-                "No router available for this request",
-            )
-                .into_response()
-        }
-    }
-
     /// Route a chat completion request
     async fn route_chat(
         &self,
@@ -716,27 +696,6 @@ impl RouterTrait for RouterManager {
                 None => "No routers registered to handle this request".to_string(),
             };
             (StatusCode::NOT_FOUND, msg).into_response()
-        }
-    }
-
-    /// Route rerank request
-    async fn route_rerank(
-        &self,
-        headers: Option<&HeaderMap>,
-        body: &RerankRequest,
-        model_id: Option<&str>,
-    ) -> Response {
-        // Try to select a router based on headers
-        let router = self.select_router_for_request(headers, None);
-
-        if let Some(router) = router {
-            router.route_rerank(headers, body, model_id).await
-        } else {
-            (
-                StatusCode::NOT_FOUND,
-                "No router available for rerank request",
-            )
-                .into_response()
         }
     }
 

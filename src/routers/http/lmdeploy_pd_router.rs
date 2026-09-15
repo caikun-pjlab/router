@@ -1094,20 +1094,6 @@ impl RouterTrait for LMDeployPDRouter {
             .into_response()
     }
 
-    async fn route_inference_generate(
-        &self,
-        _headers: Option<&HeaderMap>,
-        _body: &crate::protocols::spec::InferenceGenerateRequest,
-        _model_id: Option<&str>,
-    ) -> Response {
-        // lmdeploy has no /inference/v1/generate endpoint
-        (
-            StatusCode::NOT_IMPLEMENTED,
-            "inference/v1/generate not supported for lmdeploy PD router",
-        )
-            .into_response()
-    }
-
     async fn route_chat(
         &self,
         headers: Option<&HeaderMap>,
@@ -1186,19 +1172,6 @@ impl RouterTrait for LMDeployPDRouter {
         (
             StatusCode::NOT_IMPLEMENTED,
             "Embeddings not supported for lmdeploy PD router",
-        )
-            .into_response()
-    }
-
-    async fn route_rerank(
-        &self,
-        _headers: Option<&HeaderMap>,
-        _body: &crate::protocols::spec::RerankRequest,
-        _model_id: Option<&str>,
-    ) -> Response {
-        (
-            StatusCode::NOT_IMPLEMENTED,
-            "Rerank not supported for lmdeploy PD router",
         )
             .into_response()
     }

@@ -21,11 +21,10 @@ pub(crate) const SESSION_HEADER_NAMES: &[&str] = &[
 ///
 /// Priority order:
 /// 1. HTTP Headers: x-session-id, x-user-id, x-tenant-id, x-correlation-id, x-request-id, x-trace-id
-/// 2. Body: session_params.session_id (nested)
-/// 3. Body: user field (OpenAI format)
-/// 4. Body: session_id (legacy)
-/// 5. Body: user_id (legacy)
-/// 6. Fallback: hash of request body (long) or raw text (short)
+/// 2. Body: user field (OpenAI format)
+/// 3. Body: session_id (LMDeploy /generate format)
+/// 4. Body: user_id (legacy)
+/// 5. Fallback: hash of request body (long) or raw text (short)
 pub(crate) fn extract_hash_key(
     request_text: Option<&str>,
     headers: Option<&RequestHeaders>,
@@ -69,105 +68,30 @@ pub(crate) fn extract_hash_key_from_headers(headers: &RequestHeaders) -> Option<
 
 /// Extract hash key from request body fields
 ///
-/// Priority: session_params.session_id > user > session_id > user_id
+/// Priority: user > session_id > user_id
 pub(crate) fn extract_hash_key_from_body(request_text: Option<&str>) -> Option<String> {
     let text = request_text.unwrap_or("");
     if text.is_empty() {
         return None;
     }
 
-    // 1. Try to extract session_params.session_id first (highest priority in body)
-    if let Some(session_id) = extract_nested_field_value(text, "session_params", "session_id") {
-        debug!(
-            "Hash key extraction: found session_params.session_id: {}",
-            session_id
-        );
-        return Some(format!("session:{}", session_id));
-    }
-
-    // 2. Try to extract direct user field (from OpenAI ChatCompletion/Completion requests)
+    // 1. Try to extract direct user field (from OpenAI ChatCompletion/Completion requests)
     if let Some(user) = extract_field_value(text, "user") {
         debug!("Hash key extraction: found user field: {}", user);
         return Some(format!("user:{}", user));
     }
 
-    // 3. Fallback: try legacy session_id field
+    // 2. Extract the LMDeploy top-level session_id field
     if let Some(session_id) = extract_field_value(text, "session_id") {
         return Some(format!("session:{}", session_id));
     }
 
-    // 4. Fallback: try legacy user_id field
+    // 3. Fallback: try legacy user_id field
     if let Some(user_id) = extract_field_value(text, "user_id") {
         return Some(format!("user:{}", user_id));
     }
 
     None
-}
-
-/// Extract nested field value like session_params.session_id from JSON text
-pub(crate) fn extract_nested_field_value(
-    text: &str,
-    parent_field: &str,
-    child_field: &str,
-) -> Option<String> {
-    if let Some(parent_start) = find_field_start(text, parent_field) {
-        if let Some(obj_start) = text[parent_start..].find('{') {
-            let obj_start_pos = parent_start + obj_start;
-            if let Some(obj_content) = extract_json_object(&text[obj_start_pos..]) {
-                return extract_field_value(&obj_content, child_field);
-            }
-        }
-    }
-    None
-}
-
-/// Find the start position after the colon of a field in JSON text
-pub(crate) fn find_field_start(text: &str, field_name: &str) -> Option<usize> {
-    let patterns = [format!("\"{}\"", field_name), format!("'{}'", field_name)];
-
-    for pattern in &patterns {
-        if let Some(field_pos) = text.find(pattern) {
-            let after_field = &text[field_pos + pattern.len()..];
-            for (i, ch) in after_field.char_indices() {
-                if ch == ':' {
-                    return Some(field_pos + pattern.len() + i + 1);
-                } else if !ch.is_whitespace() {
-                    break;
-                }
-            }
-        }
-    }
-    None
-}
-
-/// Extract JSON object content (simple brace matching)
-pub(crate) fn extract_json_object(text: &str) -> Option<String> {
-    if !text.starts_with('{') {
-        return None;
-    }
-
-    let mut brace_count = 0;
-    let mut end_pos = 0;
-
-    for (i, ch) in text.char_indices() {
-        match ch {
-            '{' => brace_count += 1,
-            '}' => {
-                brace_count -= 1;
-                if brace_count == 0 {
-                    end_pos = i + 1;
-                    break;
-                }
-            }
-            _ => {}
-        }
-    }
-
-    if brace_count == 0 && end_pos > 0 {
-        Some(text[0..end_pos].to_string())
-    } else {
-        None
-    }
 }
 
 /// Extract field value from JSON-like text (simple parser)
@@ -284,65 +208,6 @@ mod tests {
         );
     }
 
-    // === extract_nested_field_value tests ===
-
-    #[test]
-    fn test_extract_nested_field_value() {
-        let text = r#"{"session_params": {"session_id": "nested123"}, "prompt": "hi"}"#;
-        assert_eq!(
-            extract_nested_field_value(text, "session_params", "session_id"),
-            Some("nested123".to_string())
-        );
-    }
-
-    #[test]
-    fn test_extract_nested_field_value_missing_parent() {
-        let text = r#"{"prompt": "hi"}"#;
-        assert_eq!(
-            extract_nested_field_value(text, "session_params", "session_id"),
-            None
-        );
-    }
-
-    #[test]
-    fn test_extract_nested_field_value_missing_child() {
-        let text = r#"{"session_params": {"other": "val"}, "prompt": "hi"}"#;
-        assert_eq!(
-            extract_nested_field_value(text, "session_params", "session_id"),
-            None
-        );
-    }
-
-    // === extract_json_object tests ===
-
-    #[test]
-    fn test_extract_json_object_simple() {
-        let text = r#"{"key": "value"} trailing"#;
-        assert_eq!(
-            extract_json_object(text),
-            Some(r#"{"key": "value"}"#.to_string())
-        );
-    }
-
-    #[test]
-    fn test_extract_json_object_nested() {
-        let text = r#"{"outer": {"inner": "val"}} trailing"#;
-        assert_eq!(
-            extract_json_object(text),
-            Some(r#"{"outer": {"inner": "val"}}"#.to_string())
-        );
-    }
-
-    #[test]
-    fn test_extract_json_object_not_object() {
-        assert_eq!(extract_json_object("not json"), None);
-    }
-
-    #[test]
-    fn test_extract_json_object_unclosed() {
-        assert_eq!(extract_json_object("{unclosed"), None);
-    }
-
     // === extract_hash_key_from_headers tests ===
 
     #[test]
@@ -376,14 +241,6 @@ mod tests {
     // === extract_hash_key_from_body tests ===
 
     #[test]
-    fn test_body_extraction_session_params_priority() {
-        // session_params.session_id takes priority over direct session_id
-        let text = r#"{"session_params": {"session_id": "nested"}, "session_id": "direct"}"#;
-        let key = extract_hash_key_from_body(Some(text)).unwrap();
-        assert_eq!(key, "session:nested");
-    }
-
-    #[test]
     fn test_body_extraction_user_field() {
         let text = r#"{"user": "alice", "prompt": "hi"}"#;
         let key = extract_hash_key_from_body(Some(text)).unwrap();
@@ -391,10 +248,10 @@ mod tests {
     }
 
     #[test]
-    fn test_body_extraction_legacy_session_id() {
-        let text = r#"{"session_id": "legacy123", "prompt": "hi"}"#;
+    fn test_body_extraction_session_id() {
+        let text = r#"{"session_id": "session123", "prompt": "hi"}"#;
         let key = extract_hash_key_from_body(Some(text)).unwrap();
-        assert_eq!(key, "session:legacy123");
+        assert_eq!(key, "session:session123");
     }
 
     #[test]
@@ -450,30 +307,5 @@ mod tests {
     fn test_hash_key_fallback_none() {
         let key = extract_hash_key(None, None);
         assert_eq!(key, "request:");
-    }
-
-    // === find_field_start tests ===
-
-    #[test]
-    fn test_find_field_start_double_quoted() {
-        let text = r#"{"field": "value"}"#;
-        let pos = find_field_start(text, "field");
-        assert!(pos.is_some());
-        // Should point to after the colon
-        let after = &text[pos.unwrap()..];
-        assert!(after.trim_start().starts_with('"'));
-    }
-
-    #[test]
-    fn test_find_field_start_single_quoted() {
-        let text = r#"{'field': 'value'}"#;
-        let pos = find_field_start(text, "field");
-        assert!(pos.is_some());
-    }
-
-    #[test]
-    fn test_find_field_start_missing() {
-        let text = r#"{"other": "value"}"#;
-        assert_eq!(find_field_start(text, "field"), None);
     }
 }

@@ -135,9 +135,6 @@ fn test_prompt_input_serialization_roundtrip_string() {
         no_stop_trim: false,
         ignore_eos: false,
         skip_special_tokens: true,
-        lora_path: None,
-        session_params: None,
-        return_hidden_states: false,
         other: serde_json::Map::new(),
     };
 
@@ -180,9 +177,6 @@ fn test_prompt_input_serialization_roundtrip_int_array() {
         no_stop_trim: false,
         ignore_eos: false,
         skip_special_tokens: true,
-        lora_path: None,
-        session_params: None,
-        return_hidden_states: false,
         other: serde_json::Map::new(),
     };
 

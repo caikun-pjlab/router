@@ -8,11 +8,10 @@ use crate::otel_http::{self, ClientRequestOptions};
 use crate::policies::{LoadBalancingPolicy, PolicyRegistry};
 use crate::protocols::spec::{
     ChatCompletionRequest, CompletionRequest, EmbeddingRequest, GenerateRequest, GenerationRequest,
-    InferenceGenerateRequest, RerankRequest, RerankResponse, RerankResult, ResponsesRequest,
+    ResponsesRequest,
 };
 use crate::routers::header_utils;
 use crate::routers::{RouterTrait, WorkerManagement};
-use axum::body::to_bytes;
 use axum::{
     body::Body,
     extract::Request,
@@ -1103,25 +1102,6 @@ impl Router {
             }
         }
     }
-
-    async fn build_rerank_response(
-        req: &RerankRequest,
-        response: Response,
-    ) -> anyhow::Result<Response> {
-        let (_, response_body) = response.into_parts();
-        let body_bytes = to_bytes(response_body, usize::MAX).await?;
-        let rerank_results = serde_json::from_slice::<Vec<RerankResult>>(&body_bytes)?;
-        let mut rerank_response =
-            RerankResponse::new(rerank_results, req.model.clone(), req.rid.clone());
-        rerank_response.sort_by_score();
-        if let Some(top_k) = req.top_k {
-            rerank_response.apply_top_k(top_k);
-        }
-        if !req.return_documents {
-            rerank_response.drop_documents();
-        }
-        Ok(Json(rerank_response).into_response())
-    }
 }
 
 use async_trait::async_trait;
@@ -1192,16 +1172,6 @@ impl RouterTrait for Router {
             .await
     }
 
-    async fn route_inference_generate(
-        &self,
-        headers: Option<&HeaderMap>,
-        body: &InferenceGenerateRequest,
-        model_id: Option<&str>,
-    ) -> Response {
-        self.route_typed_request(headers, body, "/inference/v1/generate", model_id)
-            .await
-    }
-
     async fn route_chat(
         &self,
         headers: Option<&HeaderMap>,
@@ -1264,35 +1234,6 @@ impl RouterTrait for Router {
         }
 
         res
-    }
-
-    async fn route_rerank(
-        &self,
-        headers: Option<&HeaderMap>,
-        body: &RerankRequest,
-        model_id: Option<&str>,
-    ) -> Response {
-        if let Err(e) = body.validate() {
-            return (StatusCode::BAD_REQUEST, e).into_response();
-        }
-        let response = self
-            .route_typed_request(headers, body, "/v1/rerank", model_id)
-            .await;
-        if response.status().is_success() {
-            match Self::build_rerank_response(body, response).await {
-                Ok(rerank_response) => rerank_response,
-                Err(e) => {
-                    error!("Failed to build rerank response: {}", e);
-                    return (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "Failed to build rerank response".to_string(),
-                    )
-                        .into_response();
-                }
-            }
-        } else {
-            response
-        }
     }
 
     async fn flush_cache(&self) -> Response {

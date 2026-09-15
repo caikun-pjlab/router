@@ -156,7 +156,7 @@ mod transparent_proxy_routing_tests {
         let workers = create_workers(3);
 
         // Without headers, consistent hash should fall back to body content
-        let body = r#"{"session_params": {"session_id": "body-session"}, "prompt": "test"}"#;
+        let body = r#"{"session_id": "body-session", "prompt": "test"}"#;
 
         let mut selected: Vec<usize> = Vec::new();
         for _ in 0..10 {
@@ -182,10 +182,7 @@ mod transparent_proxy_routing_tests {
         let body_session = "body-session-ignored";
 
         let headers = make_headers(&[("x-session-id", header_session)]);
-        let body = format!(
-            r#"{{"session_params": {{"session_id": "{}"}}, "prompt": "test"}}"#,
-            body_session
-        );
+        let body = format!(r#"{{"session_id": "{}", "prompt": "test"}}"#, body_session);
 
         // Route with both header and body session ID
         let with_both = policy
