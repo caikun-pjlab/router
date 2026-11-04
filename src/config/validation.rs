@@ -215,6 +215,9 @@ impl ConfigValidator {
             PolicyConfig::RendezvousHash => {
                 // No specific validation needed
             }
+            PolicyConfig::StickyLeastLoaded => {
+                // Mode compatibility is checked in validate_compatibility.
+            }
         }
         Ok(())
     }
@@ -417,6 +420,40 @@ impl ConfigValidator {
 
     /// Validate compatibility between different configuration sections
     fn validate_compatibility(config: &RouterConfig) -> ConfigResult<()> {
+        let sticky_least_loaded = matches!(&config.policy, PolicyConfig::StickyLeastLoaded);
+        let regular_mode = matches!(&config.mode, RoutingMode::Regular { .. });
+        if sticky_least_loaded && (!regular_mode || config.enable_igw) {
+            return Err(ConfigError::IncompatibleConfig {
+                reason: "sticky_least_loaded is only supported in regular (hybrid) mode with IGW disabled"
+                    .to_string(),
+            });
+        }
+
+        if let RoutingMode::VllmPrefillDecode {
+            prefill_policy,
+            decode_policy,
+            ..
+        }
+        | RoutingMode::LMDeployPrefillDecode {
+            prefill_policy,
+            decode_policy,
+            ..
+        } = &config.mode
+        {
+            if prefill_policy
+                .as_ref()
+                .is_some_and(|policy| matches!(policy, PolicyConfig::StickyLeastLoaded))
+                || decode_policy
+                    .as_ref()
+                    .is_some_and(|policy| matches!(policy, PolicyConfig::StickyLeastLoaded))
+            {
+                return Err(ConfigError::IncompatibleConfig {
+                    reason: "sticky_least_loaded is only supported in regular (hybrid) mode"
+                        .to_string(),
+                });
+            }
+        }
+
         // IGW mode is independent - skip other compatibility checks when enabled
         if config.enable_igw {
             return Ok(());
@@ -588,6 +625,29 @@ mod tests {
         );
 
         assert!(ConfigValidator::validate(&config).is_ok());
+    }
+
+    #[test]
+    fn test_validate_sticky_least_loaded_mode_scope() {
+        let regular = RouterConfig::new(
+            RoutingMode::Regular {
+                worker_urls: vec!["http://worker:8000".to_string()],
+            },
+            PolicyConfig::StickyLeastLoaded,
+        );
+        assert!(ConfigValidator::validate(&regular).is_ok());
+
+        let openai = RouterConfig::new(
+            RoutingMode::OpenAI {
+                worker_urls: vec!["https://api.openai.com".to_string()],
+            },
+            PolicyConfig::StickyLeastLoaded,
+        );
+        assert!(ConfigValidator::validate(&openai).is_err());
+
+        let mut igw = regular;
+        igw.enable_igw = true;
+        assert!(ConfigValidator::validate(&igw).is_err());
     }
 
     #[test]

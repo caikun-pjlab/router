@@ -340,6 +340,9 @@ pub enum PolicyConfig {
 
     #[serde(rename = "rendezvous_hash")]
     RendezvousHash,
+
+    #[serde(rename = "sticky_least_loaded")]
+    StickyLeastLoaded,
 }
 
 impl PolicyConfig {
@@ -351,6 +354,7 @@ impl PolicyConfig {
             PolicyConfig::PowerOfTwo { .. } => "power_of_two",
             PolicyConfig::ConsistentHash { .. } => "consistent_hash",
             PolicyConfig::RendezvousHash => "rendezvous_hash",
+            PolicyConfig::StickyLeastLoaded => "sticky_least_loaded",
         }
     }
 }

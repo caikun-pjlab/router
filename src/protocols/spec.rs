@@ -588,6 +588,10 @@ impl GenerationRequest for ChatCompletionRequest {
         // policies work without a key; consistent_hash/cache_aware will treat all as same bucket.
         String::new()
     }
+
+    fn session_id(&self) -> Option<String> {
+        typed_session_id(self.session_params.as_ref(), self.user.as_deref(), None)
+    }
 }
 
 // ============= Regular Response =============
@@ -811,6 +815,10 @@ impl GenerationRequest for CompletionRequest {
 
     fn extract_text_for_routing(&self) -> String {
         self.prompt.extract_text_for_routing()
+    }
+
+    fn session_id(&self) -> Option<String> {
+        typed_session_id(self.session_params.as_ref(), self.user.as_deref(), None)
     }
 }
 
@@ -1426,6 +1434,10 @@ impl GenerationRequest for ResponsesRequest {
                 .collect::<Vec<String>>()
                 .join(" "),
         }
+    }
+
+    fn session_id(&self) -> Option<String> {
+        self.user.clone().filter(|user| !user.is_empty())
     }
 }
 
@@ -2056,6 +2068,10 @@ impl GenerationRequest for GenerateRequest {
         // No text input found
         String::new()
     }
+
+    fn session_id(&self) -> Option<String> {
+        typed_session_id(self.session_params.as_ref(), None, Some(&self.other))
+    }
 }
 
 // ==================================================================
@@ -2091,6 +2107,10 @@ impl GenerationRequest for InferenceGenerateRequest {
             .map(|id| id.to_string())
             .collect::<Vec<String>>()
             .join(" ")
+    }
+
+    fn session_id(&self) -> Option<String> {
+        typed_session_id(None, None, Some(&self.other))
     }
 }
 
@@ -2218,6 +2238,10 @@ impl GenerationRequest for RerankRequest {
 
     fn extract_text_for_routing(&self) -> String {
         self.query.clone()
+    }
+
+    fn session_id(&self) -> Option<String> {
+        self.user.clone().filter(|user| !user.is_empty())
     }
 }
 
@@ -2349,6 +2373,10 @@ impl GenerationRequest for EmbeddingRequest {
             _ => String::new(),
         }
     }
+
+    fn session_id(&self) -> Option<String> {
+        self.user.clone().filter(|user| !user.is_empty())
+    }
 }
 
 // ==================================================================
@@ -2370,6 +2398,30 @@ pub trait GenerationRequest: Send + Sync {
 
     /// Extract text content for routing decisions
     fn extract_text_for_routing(&self) -> String;
+
+    /// Extract an explicit session ID without falling back to request content.
+    fn session_id(&self) -> Option<String> {
+        None
+    }
+}
+
+fn typed_session_id(
+    session_params: Option<&HashMap<String, serde_json::Value>>,
+    user: Option<&str>,
+    other: Option<&serde_json::Map<String, serde_json::Value>>,
+) -> Option<String> {
+    let session_value = |value: Option<&serde_json::Value>| match value? {
+        serde_json::Value::String(session_id) if !session_id.is_empty() => Some(session_id.clone()),
+        serde_json::Value::Number(number) => Some(number.to_string()),
+        _ => None,
+    };
+
+    session_value(session_params.and_then(|params| params.get("session_id")))
+        .or_else(|| user.filter(|user| !user.is_empty()).map(str::to_string))
+        .or_else(|| {
+            let other = other?;
+            session_value(other.get("session_id")).or_else(|| session_value(other.get("user_id")))
+        })
 }
 
 /// Helper type for string or array of strings

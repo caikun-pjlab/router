@@ -9,6 +9,7 @@ The vLLM Router supports multiple load balancing policies for distributing reque
 | `round_robin` | General purpose, even distribution | No | No |
 | `random` | Simple deployments | No | No |
 | `consistent_hash` | Multi-turn conversations, KV cache reuse | Yes | No |
+| `sticky_least_loaded` | Multi-turn conversations with even load placement | Yes | Yes |
 | `power_of_two` | Load-sensitive workloads | No | Yes |
 | `cache_aware` | Prefix caching optimization | Yes (cache-based) | Yes |
 
@@ -123,6 +124,32 @@ curl -X POST http://router:8000/v1/chat/completions \
 - **Unhealthy fallback**: If the target worker is unhealthy, falls back to the first healthy worker
 - **Virtual nodes**: Uses 160 virtual nodes per worker for even distribution
 - **DP-aware routing**: Supports data-parallel worker URLs (e.g., `http://worker:8000@0`)
+
+---
+
+## Sticky Least Loaded
+
+The `sticky_least_loaded` policy keeps explicit sessions on the same healthy worker while placing each new session on the worker with the fewest in-flight requests. If multiple workers have the same minimum running-request count, rendezvous hashing resolves the tie deterministically.
+
+### Configuration
+
+```bash
+lmdeploy-router \
+  --policy sticky_least_loaded \
+  --worker-urls http://worker1:8000 http://worker2:8000
+```
+
+Sticky-session TTL is controlled by `VLLM_ROUTER_SLL_SESSION_EXPIRATION_IN_S` and defaults to `7200` seconds. Invalid values emit a warning and use the default. There is no `finish_session` API; the router increments running requests during selection and decrements them when the response body completes, errors, or is dropped.
+
+Session IDs use the explicit headers listed for consistent hashing, except `X-Request-ID` and `X-Trace-ID` are excluded because they identify individual HTTP requests rather than conversations. Header values take priority over body values. Supported body fields are `session_params.session_id`, `metadata.user_id` (Anthropic), `user`, `session_id`, and `user_id`.
+
+The policy supports Regular (hybrid LMDeploy) routing and typed inference routes including generation/chat, `/v1/responses`, and the transparent JSON fallback used by `/v1/messages`. It is rejected in PD, OpenAI, and IGW modes.
+
+### Behavior
+
+- Existing sessions remain sticky until their TTL expires or their worker becomes unavailable.
+- Requests without an explicit session ID use least-running-load placement but do not create a session mapping.
+- Session expiry is checked on access; stale entries are also swept periodically.
 
 ---
 

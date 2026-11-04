@@ -23,13 +23,17 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use futures_util::StreamExt;
+use bytes::Bytes;
+use futures_util::{Stream, StreamExt};
 use reqwest::Client;
 use std::collections::HashMap;
+use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
-use tokio_stream::wrappers::UnboundedReceiverStream;
 use tracing::{debug, error, info, warn};
+
+use crate::policies::hash_key;
 
 /// Regular router that uses injected load balancing policies
 #[derive(Debug)]
@@ -45,6 +49,42 @@ pub struct Router {
     circuit_breaker_config: CircuitBreakerConfig,
     _worker_loads: Arc<tokio::sync::watch::Receiver<HashMap<String, isize>>>,
     _load_monitor_handle: Option<Arc<tokio::task::JoinHandle<()>>>,
+}
+
+struct RunningLoadGuard {
+    worker: Arc<dyn Worker>,
+}
+
+impl Drop for RunningLoadGuard {
+    fn drop(&mut self) {
+        self.worker.decrement_load();
+        RouterMetrics::set_running_requests(self.worker.url(), self.worker.load());
+    }
+}
+
+struct TrackedBodyStream<S> {
+    inner: S,
+    guard: Option<RunningLoadGuard>,
+}
+
+impl<S: Stream<Item = Result<Bytes, reqwest::Error>> + Unpin> Stream for TrackedBodyStream<S> {
+    type Item = S::Item;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        match self.inner.poll_next_unpin(cx) {
+            Poll::Ready(Some(chunk)) => {
+                if chunk.is_err() {
+                    self.guard.take();
+                }
+                Poll::Ready(Some(chunk))
+            }
+            Poll::Ready(None) => {
+                self.guard.take();
+                Poll::Ready(None)
+            }
+            Poll::Pending => Poll::Pending,
+        }
+    }
 }
 
 impl Router {
@@ -508,6 +548,7 @@ impl Router {
         model_id: Option<&str>,
         text: Option<&str>,
         headers: Option<&HeaderMap>,
+        session_id: Option<&str>,
     ) -> Option<Arc<dyn Worker>> {
         // Get workers for the specified model (O(1) lookup if model_id is provided)
         let workers = match model_id {
@@ -533,7 +574,17 @@ impl Router {
         // Convert headers for policies that need them (e.g., consistent_hash)
         let request_headers = Self::headers_to_request_headers(headers);
 
-        let idx = policy.select_worker_with_headers(&available, text, request_headers.as_ref())?;
+        let header_session_id = request_headers
+            .as_ref()
+            .and_then(|headers| hash_key::extract_session_id_from_headers(Some(headers)));
+        let session_id = header_session_id.as_deref().or(session_id);
+
+        let idx = policy.select_worker_with_session(
+            &available,
+            text,
+            request_headers.as_ref(),
+            session_id,
+        )?;
         Some(available[idx].clone())
     }
 
@@ -547,12 +598,18 @@ impl Router {
         let start = Instant::now();
         let is_stream = typed_req.is_stream();
         let text = typed_req.extract_text_for_routing();
+        let session_id = typed_req.session_id();
 
         let response = RetryExecutor::execute_response_with_retry(
             &self.retry_config,
             // operation per attempt
             |_: u32| async {
-                let worker = match self.select_worker_for_model(model_id, Some(&text), headers) {
+                let worker = match self.select_worker_for_model(
+                    model_id,
+                    Some(&text),
+                    headers,
+                    session_id.as_deref(),
+                ) {
                     Some(w) => w,
                     None => {
                         RouterMetrics::record_request_error(route, "no_available_workers");
@@ -564,24 +621,23 @@ impl Router {
                     }
                 };
 
-                // Optional load tracking for cache-aware policy
-                // Get the policy for this model to check if it's cache-aware
+                // Sticky policies increment running load during selection; cache-aware
+                // policies increment it here.
                 let policy = match model_id {
                     Some(model) => self.policy_registry.get_policy_or_default(model),
                     None => self.policy_registry.get_default_policy(),
                 };
 
-                let load_incremented = if policy.name() == "cache_aware" {
+                let load_guard = if policy.starts_running_load() {
+                    Some(RunningLoadGuard {
+                        worker: worker.clone(),
+                    })
+                } else if policy.name() == "cache_aware" {
                     worker.increment_load();
                     RouterMetrics::set_running_requests(worker.url(), worker.load());
-                    true
-                } else {
-                    false
-                };
-
-                // Keep a clone for potential cleanup on retry
-                let worker_for_cleanup = if load_incremented {
-                    Some(worker.clone())
+                    Some(RunningLoadGuard {
+                        worker: worker.clone(),
+                    })
                 } else {
                     None
                 };
@@ -593,7 +649,7 @@ impl Router {
                         route,
                         worker.url(),
                         is_stream,
-                        load_incremented,
+                        load_guard,
                     )
                     .await;
 
@@ -601,18 +657,6 @@ impl Router {
                 // should count against the circuit breaker.
                 let status = response.status();
                 worker.record_outcome(status.is_success() || status.is_client_error());
-
-                // For retryable failures, we need to decrement load since send_typed_request
-                // won't have done it (it only decrements on success or non-retryable failures)
-                if is_retryable_status(response.status()) && load_incremented {
-                    if let Some(cleanup_worker) = worker_for_cleanup {
-                        cleanup_worker.decrement_load();
-                        RouterMetrics::set_running_requests(
-                            cleanup_worker.url(),
-                            cleanup_worker.load(),
-                        );
-                    }
-                }
 
                 response
             },
@@ -771,8 +815,9 @@ impl Router {
         route: &str,
         worker_url: &str,
         is_stream: bool,
-        load_incremented: bool, // Whether load was incremented for this request
+        load_guard: Option<RunningLoadGuard>,
     ) -> Response {
+        let mut load_guard = load_guard;
         let (mut request_builder, extracted_dp_rank, request_url) =
             if self.intra_node_data_parallel_size > 1 {
                 let (worker_url_prefix, dp_rank) = match dp_utils::extract_dp_rank(worker_url) {
@@ -856,14 +901,6 @@ impl Router {
                     worker_url, route, e
                 );
 
-                // Decrement load on error if it was incremented
-                if load_incremented {
-                    if let Some(worker) = self.worker_registry.get_by_url(worker_url) {
-                        worker.decrement_load();
-                        RouterMetrics::set_running_requests(worker_url, worker.load());
-                    }
-                }
-
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     format!("Request failed: {}", e),
@@ -874,6 +911,10 @@ impl Router {
 
         let status = StatusCode::from_u16(res.status().as_u16())
             .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+
+        if is_retryable_status(status) {
+            load_guard.take();
+        }
 
         if !is_stream {
             // For non-streaming requests, preserve headers
@@ -887,115 +928,27 @@ impl Router {
                     response
                 }
                 Err(e) => {
-                    // IMPORTANT: Decrement load on error before returning
-                    if load_incremented {
-                        if let Some(worker) = self.worker_registry.get_by_url(worker_url) {
-                            worker.decrement_load();
-                            RouterMetrics::set_running_requests(worker_url, worker.load());
-                        }
-                    }
-
                     let error_msg = format!("Failed to get response body: {}", e);
                     (StatusCode::INTERNAL_SERVER_ERROR, error_msg).into_response()
                 }
             };
 
-            // Decrement load counter for non-streaming requests if it was incremented
-            if load_incremented {
-                if let Some(worker) = self.worker_registry.get_by_url(worker_url) {
-                    worker.decrement_load();
-                    RouterMetrics::set_running_requests(worker_url, worker.load());
-                }
-            }
-
-            response
-        } else if load_incremented {
-            // For streaming with load tracking, we need to manually decrement when done
-            let registry = Arc::clone(&self.worker_registry);
-            let worker_url = worker_url.to_string();
-
-            // Preserve headers for streaming response
-            let mut response_headers = header_utils::preserve_response_headers(res.headers());
-            // Ensure we set the correct content-type for SSE
-            response_headers.insert(CONTENT_TYPE, HeaderValue::from_static("text/event-stream"));
-
-            let stream = res.bytes_stream();
-            let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-
-            // Spawn task to forward stream and detect completion
-            tokio::spawn(async move {
-                let mut stream = stream;
-                let mut decremented = false;
-                while let Some(chunk) = stream.next().await {
-                    match chunk {
-                        Ok(bytes) => {
-                            // Check for stream end marker
-                            if bytes
-                                .as_ref()
-                                .windows(12)
-                                .any(|window| window == b"data: [DONE]")
-                            {
-                                if let Some(worker) = registry.get_by_url(&worker_url) {
-                                    worker.decrement_load();
-                                    RouterMetrics::set_running_requests(&worker_url, worker.load());
-                                    decremented = true;
-                                }
-                            }
-                            if tx.send(Ok(bytes)).is_err() {
-                                break;
-                            }
-                        }
-                        Err(e) => {
-                            let _ = tx.send(Err(format!("Stream error: {}", e)));
-                            break;
-                        }
-                    }
-                }
-                if !decremented {
-                    if let Some(worker) = registry.get_by_url(&worker_url) {
-                        worker.decrement_load();
-                        RouterMetrics::set_running_requests(&worker_url, worker.load());
-                    }
-                }
-            });
-
-            let stream = UnboundedReceiverStream::new(rx);
-            let body = Body::from_stream(stream);
-
-            let mut response = Response::new(body);
-            *response.status_mut() = status;
-            *response.headers_mut() = response_headers;
+            load_guard.take();
             response
         } else {
-            // For requests without load tracking, just stream
             // Preserve headers for streaming response
             let mut response_headers = header_utils::preserve_response_headers(res.headers());
             // Ensure we set the correct content-type for SSE
             response_headers.insert(CONTENT_TYPE, HeaderValue::from_static("text/event-stream"));
 
             let stream = res.bytes_stream();
-            let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-
-            // Spawn task to forward stream
-            tokio::spawn(async move {
-                let mut stream = stream;
-                while let Some(chunk) = stream.next().await {
-                    match chunk {
-                        Ok(bytes) => {
-                            if tx.send(Ok(bytes)).is_err() {
-                                break;
-                            }
-                        }
-                        Err(e) => {
-                            let _ = tx.send(Err(format!("Stream error: {}", e)));
-                            break;
-                        }
-                    }
-                }
-            });
-
-            let stream = UnboundedReceiverStream::new(rx);
-            let body = Body::from_stream(stream);
+            let body = match load_guard {
+                Some(guard) => Body::from_stream(TrackedBodyStream {
+                    inner: stream,
+                    guard: Some(guard),
+                }),
+                None => Body::from_stream(stream),
+            };
 
             let mut response = Response::new(body);
             *response.status_mut() = status;
@@ -1632,6 +1585,17 @@ impl RouterTrait for Router {
     ) -> Response {
         debug!("Transparent proxy: routing {} {} to backend", method, path);
 
+        if !matches!(
+            method.as_str(),
+            "GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "HEAD"
+        ) {
+            return (
+                StatusCode::METHOD_NOT_ALLOWED,
+                format!("Method {} not supported", method),
+            )
+                .into_response();
+        }
+
         // Select a worker (filter by availability like select_worker_for_model)
         let all_workers = self.worker_registry.get_all();
         let workers: Vec<Arc<dyn Worker>> = all_workers
@@ -1650,10 +1614,16 @@ impl RouterTrait for Router {
         let policy = self.policy_registry.get_default_policy();
         let request_text = serde_json::to_string(&body).ok();
         let request_headers = Self::headers_to_request_headers(headers);
-        let worker_idx = match policy.select_worker_with_headers(
+        let header_session_id = request_headers
+            .as_ref()
+            .and_then(|headers| hash_key::extract_session_id_from_headers(Some(headers)));
+        let body_session_id = hash_key::extract_session_id_from_value(&body);
+        let session_id = header_session_id.as_deref().or(body_session_id.as_deref());
+        let worker_idx = match policy.select_worker_with_session(
             &workers,
             request_text.as_deref(),
             request_headers.as_ref(),
+            session_id.as_deref(),
         ) {
             Some(idx) => idx,
             None => {
@@ -1665,8 +1635,11 @@ impl RouterTrait for Router {
             }
         };
 
-        let worker: &dyn Worker = workers[worker_idx].as_ref();
+        let worker = workers[worker_idx].clone();
         let url = worker.endpoint_url(path);
+        let load_guard = policy.starts_running_load().then(|| RunningLoadGuard {
+            worker: worker.clone(),
+        });
 
         debug!("Transparent proxy: forwarding to {}", url);
 
@@ -1678,13 +1651,7 @@ impl RouterTrait for Router {
             Method::DELETE => self.client.delete(&url),
             Method::PATCH => self.client.patch(&url),
             Method::HEAD => self.client.head(&url),
-            _ => {
-                return (
-                    StatusCode::METHOD_NOT_ALLOWED,
-                    format!("Method {} not supported", method),
-                )
-                    .into_response();
-            }
+            _ => unreachable!("method was validated before selection"),
         };
 
         // Add X-data-parallel-rank header for DP-aware routing
@@ -1742,8 +1709,14 @@ impl RouterTrait for Router {
                 let status = response.status();
                 let headers = response.headers().clone();
 
-                // Stream the response body
-                let body = Body::from_stream(response.bytes_stream());
+                let stream = response.bytes_stream();
+                let body = match load_guard {
+                    Some(guard) => Body::from_stream(TrackedBodyStream {
+                        inner: stream,
+                        guard: Some(guard),
+                    }),
+                    None => Body::from_stream(stream),
+                };
                 let mut response_builder = Response::builder().status(status.as_u16());
 
                 for (name, value) in headers.iter() {
@@ -1773,20 +1746,19 @@ impl RouterTrait for Router {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::PolicyConfig;
     use std::collections::HashMap;
 
-    fn create_test_regular_router() -> Router {
-        // Create registries
+    fn create_test_router(policy_config: PolicyConfig, worker_urls: &[&str]) -> Router {
         let worker_registry = Arc::new(WorkerRegistry::new());
-        let policy_registry = Arc::new(PolicyRegistry::new(
-            crate::config::types::PolicyConfig::RoundRobin,
-        ));
+        let policy_registry = Arc::new(PolicyRegistry::new(policy_config));
 
-        // Register test workers
-        let worker1 = BasicWorker::new("http://worker1:8080".to_string(), WorkerType::Regular);
-        let worker2 = BasicWorker::new("http://worker2:8080".to_string(), WorkerType::Regular);
-        worker_registry.register(Arc::new(worker1));
-        worker_registry.register(Arc::new(worker2));
+        for worker_url in worker_urls {
+            worker_registry.register(Arc::new(BasicWorker::new(
+                (*worker_url).to_string(),
+                WorkerType::Regular,
+            )));
+        }
 
         let (_, rx) = tokio::sync::watch::channel(HashMap::new());
         Router {
@@ -1802,6 +1774,180 @@ mod tests {
             _worker_loads: Arc::new(rx),
             _load_monitor_handle: None,
         }
+    }
+
+    fn create_test_regular_router() -> Router {
+        create_test_router(
+            PolicyConfig::RoundRobin,
+            &["http://worker1:8080", "http://worker2:8080"],
+        )
+    }
+
+    fn create_test_sticky_router(worker_urls: &[&str]) -> Router {
+        create_test_router(PolicyConfig::StickyLeastLoaded, worker_urls)
+    }
+
+    async fn wait_for_backend(base_url: &str, client: &Client) {
+        for _ in 0..100 {
+            if client
+                .get(format!("{}/health", base_url))
+                .send()
+                .await
+                .is_ok_and(|response| response.status().is_success())
+            {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        panic!("backend did not become ready");
+    }
+
+    #[test]
+    fn select_worker_for_model_prefers_header_session_over_typed_session() {
+        let router = create_test_sticky_router(&["http://worker1:8080", "http://worker2:8080"]);
+        let workers = router.worker_registry.get_all();
+        workers
+            .iter()
+            .find(|worker| worker.url() == "http://worker2:8080")
+            .unwrap()
+            .increment_load();
+
+        let mut headers = HeaderMap::new();
+        headers.insert("x-session-id", HeaderValue::from_static("header-session"));
+        let selected = router
+            .select_worker_for_model(
+                None,
+                Some(r#"{"prompt": "request"}"#),
+                Some(&headers),
+                Some("body-session"),
+            )
+            .unwrap();
+        assert_eq!(selected.url(), "http://worker1:8080");
+
+        for worker_url in ["http://worker1:8080", "http://worker2:8080"] {
+            let worker = workers
+                .iter()
+                .find(|worker| worker.url() == worker_url)
+                .unwrap();
+            worker.decrement_load();
+        }
+        workers
+            .iter()
+            .find(|worker| worker.url() == "http://worker1:8080")
+            .unwrap()
+            .increment_load();
+        let selected = router
+            .select_worker_for_model(
+                None,
+                Some(r#"{"prompt": "request"}"#),
+                None,
+                Some("body-session"),
+            )
+            .unwrap();
+        assert_eq!(selected.url(), "http://worker2:8080");
+    }
+
+    #[tokio::test]
+    async fn typed_sticky_request_releases_running_load() {
+        use crate::protocols::spec::GenerateRequest;
+        use tokio::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let worker_url = format!("http://{}", listener.local_addr().unwrap());
+        let backend = axum::Router::new()
+            .route("/health", axum::routing::get(|| async move { "ok" }))
+            .route("/generate", axum::routing::post(|| async move { "{}" }));
+        let backend_task = tokio::spawn(async move {
+            axum::serve(listener, backend).await.unwrap();
+        });
+        let client = Client::builder()
+            .no_proxy()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .unwrap();
+        wait_for_backend(&worker_url, &client).await;
+
+        let mut router = create_test_sticky_router(&[&worker_url, "http://127.0.0.1:1"]);
+        router.client = client;
+        let workers = router.worker_registry.get_all();
+        workers
+            .iter()
+            .find(|worker| worker.url() == "http://127.0.0.1:1")
+            .unwrap()
+            .increment_load();
+        let request: GenerateRequest = serde_json::from_str(r#"{"prompt": "hello"}"#).unwrap();
+        let mut headers = HeaderMap::new();
+        headers.insert("x-session-id", HeaderValue::from_static("typed-session"));
+
+        for _ in 0..2 {
+            let response = router
+                .route_typed_request(Some(&headers), &request, "/generate", None)
+                .await;
+            assert_eq!(response.status(), StatusCode::OK);
+            let worker = router.worker_registry.get_by_url(&worker_url).unwrap();
+            assert_eq!(worker.load(), 0);
+        }
+
+        backend_task.abort();
+    }
+
+    #[tokio::test]
+    async fn transparent_sticky_stream_releases_running_load_once() {
+        use tokio::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let worker_url = format!("http://{}", listener.local_addr().unwrap());
+        let backend = axum::Router::new()
+            .route("/health", axum::routing::get(|| async move { "ok" }))
+            .route(
+                "/v1/messages",
+                axum::routing::post(|| async move {
+                    Response::builder()
+                        .header(CONTENT_TYPE, "text/event-stream")
+                        .body(Body::from("data: [DONE]\n\ndata: [DONE]\n\n"))
+                        .unwrap()
+                }),
+            );
+        let backend_task = tokio::spawn(async move {
+            axum::serve(listener, backend).await.unwrap();
+        });
+        let client = Client::builder()
+            .no_proxy()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .unwrap();
+        wait_for_backend(&worker_url, &client).await;
+
+        let mut router = create_test_sticky_router(&[&worker_url]);
+        router.client = client;
+        let body: serde_json::Value =
+            serde_json::from_str(r#"{"metadata": {"user_id": "transparent-session"}}"#).unwrap();
+        let mut headers = HeaderMap::new();
+        headers.insert("x-request-id", HeaderValue::from_static("request-1"));
+        headers.insert("x-trace-id", HeaderValue::from_static("trace-1"));
+
+        let response = RouterTrait::route_transparent(
+            &router,
+            Some(&headers),
+            "/v1/messages",
+            &Method::POST,
+            body,
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+        assert_eq!(body.as_ref(), b"data: [DONE]\n\ndata: [DONE]\n\n");
+
+        let worker = router.worker_registry.get_by_url(&worker_url).unwrap();
+        assert_eq!(worker.load(), 0);
+        let policy = router.policy_registry.get_default_policy();
+        let sticky = policy
+            .as_any()
+            .downcast_ref::<crate::policies::StickyLeastLoadedPolicy>()
+            .unwrap();
+        assert_eq!(sticky.session_count(), 1);
+
+        backend_task.abort();
     }
 
     #[test]
@@ -2042,32 +2188,14 @@ mod tests {
 
     /// Create a test router with ConsistentHash policy instead of RoundRobin
     fn create_test_consistent_hash_router() -> Router {
-        let worker_registry = Arc::new(WorkerRegistry::new());
-        let policy_registry = Arc::new(PolicyRegistry::new(
-            crate::config::types::PolicyConfig::ConsistentHash { virtual_nodes: 100 },
-        ));
-
-        let worker1 = BasicWorker::new("http://worker1:8080".to_string(), WorkerType::Regular);
-        let worker2 = BasicWorker::new("http://worker2:8080".to_string(), WorkerType::Regular);
-        let worker3 = BasicWorker::new("http://worker3:8080".to_string(), WorkerType::Regular);
-        worker_registry.register(Arc::new(worker1));
-        worker_registry.register(Arc::new(worker2));
-        worker_registry.register(Arc::new(worker3));
-
-        let (_, rx) = tokio::sync::watch::channel(HashMap::new());
-        Router {
-            worker_registry,
-            policy_registry,
-            worker_startup_timeout_secs: 5,
-            worker_startup_check_interval_secs: 1,
-            intra_node_data_parallel_size: 1,
-            api_key: None,
-            client: Client::new(),
-            retry_config: RetryConfig::default(),
-            circuit_breaker_config: CircuitBreakerConfig::default(),
-            _worker_loads: Arc::new(rx),
-            _load_monitor_handle: None,
-        }
+        create_test_router(
+            PolicyConfig::ConsistentHash { virtual_nodes: 100 },
+            &[
+                "http://worker1:8080",
+                "http://worker2:8080",
+                "http://worker3:8080",
+            ],
+        )
     }
 
     #[test]
@@ -2117,7 +2245,12 @@ mod tests {
         let mut selected_urls: Vec<String> = Vec::new();
         for _ in 0..10 {
             let worker = router
-                .select_worker_for_model(None, Some(r#"{"prompt": "test"}"#), Some(&header_map))
+                .select_worker_for_model(
+                    None,
+                    Some(r#"{"prompt": "test"}"#),
+                    Some(&header_map),
+                    None,
+                )
                 .expect("Should select a worker");
             selected_urls.push(worker.url().to_string());
         }
@@ -2147,7 +2280,7 @@ mod tests {
         }
 
         let worker = router
-            .select_worker_for_model(None, Some(r#"{"prompt": "test"}"#), None)
+            .select_worker_for_model(None, Some(r#"{"prompt": "test"}"#), None, None)
             .expect("Should select the remaining healthy worker");
 
         assert_eq!(
@@ -2168,7 +2301,8 @@ mod tests {
             w.set_healthy(false);
         }
 
-        let result = router.select_worker_for_model(None, Some(r#"{"prompt": "test"}"#), None);
+        let result =
+            router.select_worker_for_model(None, Some(r#"{"prompt": "test"}"#), None, None);
         assert!(
             result.is_none(),
             "Should return None when all workers are unavailable"
@@ -2190,6 +2324,7 @@ mod tests {
                 None,
                 Some(r#"{"prompt": "test"}"#),
                 Some(&header_map),
+                None,
             ) {
                 worker_urls_seen.insert(worker.url().to_string());
             }

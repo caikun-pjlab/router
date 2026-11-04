@@ -5,6 +5,7 @@
 
 use super::RequestHeaders;
 use crate::policies::ConsistentHashPolicy;
+use serde_json::Value;
 use tracing::debug;
 
 /// HTTP header names to check for session ID (case-insensitive, checked in order)
@@ -17,6 +18,67 @@ pub(crate) const SESSION_HEADER_NAMES: &[&str] = &[
     "x-request-id",
     "x-trace-id",
 ];
+
+/// Headers that identify a durable session for sticky routing.
+///
+/// Request and trace IDs are intentionally excluded: they usually identify one
+/// HTTP request rather than a multi-turn session.
+pub(crate) const STICKY_SESSION_HEADER_NAMES: &[&str] = &[
+    "x-session-affinity",
+    "x-session-id",
+    "x-user-id",
+    "x-tenant-id",
+    "x-correlation-id",
+];
+
+/// Extract an explicit session ID without falling back to request content.
+pub(crate) fn extract_session_id(
+    request_text: Option<&str>,
+    headers: Option<&RequestHeaders>,
+) -> Option<String> {
+    if let Some(session_id) = extract_session_id_from_headers(headers) {
+        return Some(session_id);
+    }
+
+    let text = request_text?;
+    let value = serde_json::from_str::<Value>(text).ok()?;
+    extract_session_id_from_value(&value)
+}
+
+pub(crate) fn extract_session_id_from_headers(headers: Option<&RequestHeaders>) -> Option<String> {
+    let headers = headers?;
+    STICKY_SESSION_HEADER_NAMES
+        .iter()
+        .find_map(|name| headers.get(*name))
+        .filter(|value| !value.is_empty())
+        .cloned()
+}
+
+pub(crate) fn extract_session_id_from_value(value: &Value) -> Option<String> {
+    let object = value.as_object()?;
+    let session_params = object
+        .get("session_params")
+        .and_then(Value::as_object)
+        .and_then(|params| params.get("session_id"));
+    let metadata_user_id = object
+        .get("metadata")
+        .and_then(Value::as_object)
+        .and_then(|metadata| metadata.get("user_id"));
+
+    session_id_value(session_params)
+        .or_else(|| session_id_value(metadata_user_id))
+        .or_else(|| session_id_value(object.get("user")))
+        .or_else(|| session_id_value(object.get("session_id")))
+        .or_else(|| session_id_value(object.get("user_id")))
+}
+
+fn session_id_value(value: Option<&Value>) -> Option<String> {
+    match value? {
+        Value::String(session_id) if !session_id.is_empty() => Some(session_id.clone()),
+        Value::Number(number) => Some(number.to_string()),
+        _ => None,
+    }
+}
 
 /// Extract hash key with priority: HTTP headers > body fields > request content hash
 ///
@@ -233,6 +295,29 @@ pub(crate) fn extract_field_value(text: &str, field_name: &str) -> Option<String
 mod tests {
     use super::*;
     use std::collections::HashMap;
+
+    #[test]
+    fn sticky_session_headers_exclude_request_and_trace_ids() {
+        let mut headers = HashMap::new();
+        headers.insert("x-request-id".to_string(), "request-1".to_string());
+        headers.insert("x-trace-id".to_string(), "trace-1".to_string());
+
+        let body = r#"{"session_id": "body-session"}"#;
+        assert_eq!(
+            extract_session_id(Some(body), Some(&headers)),
+            Some("body-session".to_string())
+        );
+        assert_eq!(extract_session_id(None, Some(&headers)), None);
+    }
+
+    #[test]
+    fn sticky_session_extracts_anthropic_metadata_user_id() {
+        let body = r#"{"metadata": {"user_id": "anthropic-user"}, "messages": []}"#;
+        assert_eq!(
+            extract_session_id(Some(body), None),
+            Some("anthropic-user".to_string())
+        );
+    }
 
     // === extract_field_value tests ===
 
