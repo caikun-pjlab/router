@@ -364,10 +364,6 @@ impl WorkerRegistry {
             let mut interval =
                 tokio::time::interval(tokio::time::Duration::from_secs(check_interval_secs));
 
-            // Counter for periodic load reset (every 10 health check cycles)
-            let mut check_count = 0u64;
-            const LOAD_RESET_INTERVAL: u64 = 10;
-
             loop {
                 interval.tick().await;
 
@@ -387,28 +383,10 @@ impl WorkerRegistry {
                 for worker in &workers {
                     let _ = worker.check_health_async().await; // Use async version directly
                 }
-
-                // Reset loads periodically
-                check_count += 1;
-                if check_count.is_multiple_of(LOAD_RESET_INTERVAL) {
-                    Self::reset_idle_loads(&workers);
-                }
             }
         });
 
         crate::core::HealthChecker::new(handle, shutdown)
-    }
-
-    fn reset_idle_loads(workers: &[Arc<dyn crate::core::Worker>]) {
-        if workers.iter().any(|worker| worker.load() > 0) {
-            tracing::debug!("Skipping load reset while requests are in flight");
-            return;
-        }
-
-        tracing::debug!("Resetting idle worker load counters");
-        for worker in workers {
-            worker.reset_load();
-        }
     }
 }
 
@@ -433,7 +411,7 @@ pub struct WorkerRegistryStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::{BasicWorker, CircuitBreakerConfig, WorkerFactory};
+    use crate::core::{CircuitBreakerConfig, WorkerFactory};
     use std::collections::HashMap;
 
     #[test]
@@ -470,23 +448,6 @@ mod tests {
         // Remove worker
         registry.remove(&worker_id);
         assert!(registry.get(&worker_id).is_none());
-    }
-
-    #[test]
-    fn load_reset_skips_in_flight_requests() {
-        let worker = Arc::new(BasicWorker::new(
-            "http://worker:8080".to_string(),
-            WorkerType::Regular,
-        ));
-        let workers: Vec<Arc<dyn Worker>> = vec![worker.clone()];
-
-        worker.increment_load();
-        WorkerRegistry::reset_idle_loads(&workers);
-        assert_eq!(worker.load(), 1);
-
-        worker.decrement_load();
-        WorkerRegistry::reset_idle_loads(&workers);
-        assert_eq!(worker.load(), 0);
     }
 
     #[test]
