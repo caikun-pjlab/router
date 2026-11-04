@@ -49,8 +49,7 @@ pub(crate) fn extract_session_id_from_headers(headers: Option<&RequestHeaders>) 
     let headers = headers?;
     STICKY_SESSION_HEADER_NAMES
         .iter()
-        .find_map(|name| headers.get(*name))
-        .filter(|value| !value.is_empty())
+        .find_map(|name| headers.get(*name).filter(|value| !value.is_empty()))
         .cloned()
 }
 
@@ -299,15 +298,21 @@ mod tests {
     #[test]
     fn sticky_session_headers_exclude_request_and_trace_ids() {
         let mut headers = HashMap::new();
+        headers.insert("x-session-affinity".to_string(), String::new());
+        headers.insert("x-session-id".to_string(), "session-header".to_string());
         headers.insert("x-request-id".to_string(), "request-1".to_string());
         headers.insert("x-trace-id".to_string(), "trace-1".to_string());
 
         let body = r#"{"session_id": "body-session"}"#;
         assert_eq!(
             extract_session_id(Some(body), Some(&headers)),
-            Some("body-session".to_string())
+            Some("session-header".to_string())
         );
-        assert_eq!(extract_session_id(None, Some(&headers)), None);
+
+        let mut request_headers = HashMap::new();
+        request_headers.insert("x-request-id".to_string(), "request-1".to_string());
+        request_headers.insert("x-trace-id".to_string(), "trace-1".to_string());
+        assert_eq!(extract_session_id(None, Some(&request_headers)), None);
     }
 
     #[test]

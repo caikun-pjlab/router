@@ -909,15 +909,11 @@ pub fn start_health_checker(
             };
 
             // Periodically reset load counters to prevent drift
-            // Only do this when we believe all workers should be idle
+            // Only reset when no request is in flight; resetting an active
+            // count would let a later completion subtract from a newer request.
             if check_count.is_multiple_of(LOAD_RESET_INTERVAL) {
-                let max_load = workers_to_check.iter().map(|w| w.load()).max().unwrap_or(0);
-                // Only reset if load appears to be very low (likely drift)
-                if max_load <= 2 {
-                    tracing::debug!(
-                        "Resetting load counters to prevent drift (max_load: {})",
-                        max_load
-                    );
+                if workers_to_check.iter().all(|worker| worker.load() == 0) {
+                    tracing::debug!("Resetting idle worker load counters");
                     for worker in &workers_to_check {
                         worker.reset_load();
                     }

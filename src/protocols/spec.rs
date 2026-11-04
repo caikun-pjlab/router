@@ -590,7 +590,11 @@ impl GenerationRequest for ChatCompletionRequest {
     }
 
     fn session_id(&self) -> Option<String> {
-        typed_session_id(self.session_params.as_ref(), self.user.as_deref(), None)
+        typed_session_id(
+            self.session_params.as_ref(),
+            self.user.as_deref(),
+            Some(&self.other),
+        )
     }
 }
 
@@ -818,7 +822,11 @@ impl GenerationRequest for CompletionRequest {
     }
 
     fn session_id(&self) -> Option<String> {
-        typed_session_id(self.session_params.as_ref(), self.user.as_deref(), None)
+        typed_session_id(
+            self.session_params.as_ref(),
+            self.user.as_deref(),
+            Some(&self.other),
+        )
     }
 }
 
@@ -2415,13 +2423,19 @@ fn typed_session_id(
         serde_json::Value::Number(number) => Some(number.to_string()),
         _ => None,
     };
+    let other_field = |field: &str| other.and_then(|other| other.get(field));
 
     session_value(session_params.and_then(|params| params.get("session_id")))
-        .or_else(|| user.filter(|user| !user.is_empty()).map(str::to_string))
         .or_else(|| {
-            let other = other?;
-            session_value(other.get("session_id")).or_else(|| session_value(other.get("user_id")))
+            other_field("metadata")
+                .and_then(serde_json::Value::as_object)
+                .and_then(|metadata| metadata.get("user_id"))
+                .and_then(|user_id| session_value(Some(user_id)))
         })
+        .or_else(|| user.filter(|user| !user.is_empty()).map(str::to_string))
+        .or_else(|| session_value(other_field("user")))
+        .or_else(|| session_value(other_field("session_id")))
+        .or_else(|| session_value(other_field("user_id")))
 }
 
 /// Helper type for string or array of strings
@@ -2547,6 +2561,30 @@ pub enum LoRAPath {
 mod tests {
     use super::*;
     use serde_json;
+
+    #[test]
+    fn typed_session_extraction_includes_flattened_fields() {
+        let chat: ChatCompletionRequest = serde_json::from_value(serde_json::json!({
+            "messages": [],
+            "session_id": "chat-session"
+        }))
+        .unwrap();
+        assert_eq!(chat.session_id().as_deref(), Some("chat-session"));
+
+        let completion: CompletionRequest = serde_json::from_value(serde_json::json!({
+            "prompt": "hello",
+            "user_id": 42
+        }))
+        .unwrap();
+        assert_eq!(completion.session_id().as_deref(), Some("42"));
+
+        let generate: GenerateRequest = serde_json::from_value(serde_json::json!({
+            "prompt": "hello",
+            "user": "generate-user"
+        }))
+        .unwrap();
+        assert_eq!(generate.session_id().as_deref(), Some("generate-user"));
+    }
 
     // ==================================================================
     // =  InferenceGenerateRequest (/inference/v1/generate) TESTS       =

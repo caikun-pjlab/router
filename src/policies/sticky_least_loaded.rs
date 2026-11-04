@@ -95,19 +95,25 @@ impl StickyLeastLoadedPolicy {
         healthy_indices: &[usize],
         tie_break_key: &str,
     ) -> usize {
-        let minimum_load = healthy_indices
+        let loads: Vec<(usize, usize)> = healthy_indices
             .iter()
-            .map(|&index| workers[index].load())
+            .map(|&index| (index, workers[index].load()))
+            .collect();
+
+        let minimum_load = loads
+            .iter()
+            .map(|&(_, load)| load)
             .min()
             .expect("healthy worker indices are non-empty");
 
-        *healthy_indices
+        loads
             .iter()
-            .filter(|&&index| workers[index].load() == minimum_load)
-            .max_by_key(|&&index| {
+            .filter(|&&(_, load)| load == minimum_load)
+            .max_by_key(|&&(index, _)| {
                 let hash_key = format!("{}:{}", tie_break_key, workers[index].url());
                 ConsistentHashPolicy::fbi_hash(&hash_key)
             })
+            .map(|&(index, _)| index)
             .expect("at least one worker has the minimum load")
     }
 
@@ -249,7 +255,13 @@ impl LoadBalancingPolicy for StickyLeastLoadedPolicy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::{BasicWorker, WorkerType};
+    use async_trait::async_trait;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use crate::core::worker::WorkerMetadata;
+    use crate::core::{
+        BasicWorker, CircuitBreaker, ConnectionMode, Worker, WorkerResult, WorkerType,
+    };
 
     fn make_workers(urls: &[&str]) -> Vec<Arc<dyn Worker>> {
         urls.iter()
@@ -262,6 +274,85 @@ mod tests {
 
     fn session_headers(session_id: &str) -> RequestHeaders {
         RequestHeaders::from([("x-session-id".to_string(), session_id.to_string())])
+    }
+
+    #[derive(Debug)]
+    struct ChangingLoadWorker {
+        inner: BasicWorker,
+        load_reads: AtomicUsize,
+    }
+
+    #[async_trait]
+    impl Worker for ChangingLoadWorker {
+        fn url(&self) -> &str {
+            self.inner.url()
+        }
+
+        fn worker_type(&self) -> WorkerType {
+            self.inner.worker_type()
+        }
+
+        fn connection_mode(&self) -> ConnectionMode {
+            self.inner.connection_mode()
+        }
+
+        fn is_healthy(&self) -> bool {
+            self.inner.is_healthy()
+        }
+
+        fn set_healthy(&self, healthy: bool) {
+            self.inner.set_healthy(healthy);
+        }
+
+        async fn check_health_async(&self) -> WorkerResult<()> {
+            self.inner.check_health_async().await
+        }
+
+        fn load(&self) -> usize {
+            match self.load_reads.fetch_add(1, Ordering::SeqCst) {
+                0 => 1,
+                _ => 0,
+            }
+        }
+
+        fn increment_load(&self) {
+            self.inner.increment_load();
+        }
+
+        fn decrement_load(&self) {
+            self.inner.decrement_load();
+        }
+
+        fn processed_requests(&self) -> usize {
+            self.inner.processed_requests()
+        }
+
+        fn increment_processed(&self) {
+            self.inner.increment_processed();
+        }
+
+        fn metadata(&self) -> &WorkerMetadata {
+            self.inner.metadata()
+        }
+
+        fn circuit_breaker(&self) -> &CircuitBreaker {
+            self.inner.circuit_breaker()
+        }
+    }
+
+    #[test]
+    fn selection_uses_one_load_snapshot() {
+        let policy = StickyLeastLoadedPolicy::with_expiration_secs(7200);
+        let worker = Arc::new(ChangingLoadWorker {
+            inner: BasicWorker::new("http://worker:8080".to_string(), WorkerType::Regular),
+            load_reads: AtomicUsize::new(0),
+        });
+        let workers: Vec<Arc<dyn Worker>> = vec![worker];
+
+        let selected = policy
+            .select_worker_with_session(&workers, None, None, Some("session-1"))
+            .unwrap();
+        assert_eq!(selected, 0);
     }
 
     #[test]

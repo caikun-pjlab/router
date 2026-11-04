@@ -391,15 +391,24 @@ impl WorkerRegistry {
                 // Reset loads periodically
                 check_count += 1;
                 if check_count.is_multiple_of(LOAD_RESET_INTERVAL) {
-                    tracing::debug!("Resetting worker loads (cycle {})", check_count);
-                    for worker in &workers {
-                        worker.reset_load();
-                    }
+                    Self::reset_idle_loads(&workers);
                 }
             }
         });
 
         crate::core::HealthChecker::new(handle, shutdown)
+    }
+
+    fn reset_idle_loads(workers: &[Arc<dyn crate::core::Worker>]) {
+        if workers.iter().any(|worker| worker.load() > 0) {
+            tracing::debug!("Skipping load reset while requests are in flight");
+            return;
+        }
+
+        tracing::debug!("Resetting idle worker load counters");
+        for worker in workers {
+            worker.reset_load();
+        }
     }
 }
 
@@ -424,7 +433,7 @@ pub struct WorkerRegistryStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::{CircuitBreakerConfig, WorkerFactory};
+    use crate::core::{BasicWorker, CircuitBreakerConfig, WorkerFactory};
     use std::collections::HashMap;
 
     #[test]
@@ -461,6 +470,23 @@ mod tests {
         // Remove worker
         registry.remove(&worker_id);
         assert!(registry.get(&worker_id).is_none());
+    }
+
+    #[test]
+    fn load_reset_skips_in_flight_requests() {
+        let worker = Arc::new(BasicWorker::new(
+            "http://worker:8080".to_string(),
+            WorkerType::Regular,
+        ));
+        let workers: Vec<Arc<dyn Worker>> = vec![worker.clone()];
+
+        worker.increment_load();
+        WorkerRegistry::reset_idle_loads(&workers);
+        assert_eq!(worker.load(), 1);
+
+        worker.decrement_load();
+        WorkerRegistry::reset_idle_loads(&workers);
+        assert_eq!(worker.load(), 0);
     }
 
     #[test]
