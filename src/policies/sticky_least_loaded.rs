@@ -34,6 +34,15 @@ struct SessionState {
     last_sweep: Instant,
 }
 
+#[derive(Debug)]
+struct LeastLoadedSelection<'a> {
+    index: usize,
+    candidate_running_requests: Vec<(&'a str, usize)>,
+    minimum_running_requests: usize,
+    tie_break: &'static str,
+    tie_break_hash: u64,
+}
+
 /// A sticky routing policy whose load signal is the worker running-request count.
 #[derive(Debug)]
 pub struct StickyLeastLoadedPolicy {
@@ -90,11 +99,11 @@ impl StickyLeastLoadedPolicy {
         state.last_sweep = now;
     }
 
-    fn select_least_loaded(
-        workers: &[Arc<dyn Worker>],
+    fn select_least_loaded<'a>(
+        workers: &'a [Arc<dyn Worker>],
         healthy_indices: &[usize],
         tie_break_key: &str,
-    ) -> usize {
+    ) -> LeastLoadedSelection<'a> {
         let loads: Vec<(usize, usize)> = healthy_indices
             .iter()
             .map(|&index| (index, workers[index].load()))
@@ -106,7 +115,7 @@ impl StickyLeastLoadedPolicy {
             .min()
             .expect("healthy worker indices are non-empty");
 
-        loads
+        let selected_index = loads
             .iter()
             .filter(|&&(_, load)| load == minimum_load)
             .max_by_key(|&&(index, _)| {
@@ -114,7 +123,32 @@ impl StickyLeastLoadedPolicy {
                 ConsistentHashPolicy::fbi_hash(&hash_key)
             })
             .map(|&(index, _)| index)
-            .expect("at least one worker has the minimum load")
+            .expect("at least one worker has the minimum load");
+
+        let minimum_candidates = loads
+            .iter()
+            .filter(|&&(_, load)| load == minimum_load)
+            .count();
+        let tie_break_hash = ConsistentHashPolicy::fbi_hash(&format!(
+            "{}:{}",
+            tie_break_key,
+            workers[selected_index].url()
+        ));
+
+        LeastLoadedSelection {
+            index: selected_index,
+            candidate_running_requests: loads
+                .iter()
+                .map(|&(index, load)| (workers[index].url(), load))
+                .collect(),
+            minimum_running_requests: minimum_load,
+            tie_break: if minimum_candidates == 1 {
+                "unique_minimum"
+            } else {
+                "rendezvous_hash"
+            },
+            tie_break_hash,
+        }
     }
 
     fn record_selection(&self, worker: &Arc<dyn Worker>) {
@@ -123,6 +157,30 @@ impl StickyLeastLoadedPolicy {
         worker.increment_processed();
         RouterMetrics::record_processed_request(worker.url());
         RouterMetrics::record_policy_decision(self.name(), worker.url());
+    }
+
+    fn log_least_loaded_selection(
+        session_id: Option<&str>,
+        tie_break_key_source: &'static str,
+        selection: &LeastLoadedSelection<'_>,
+        worker: &Arc<dyn Worker>,
+    ) {
+        info!(
+            session_id = session_id.unwrap_or(""),
+            tie_break_key_source,
+            selection = if session_id.is_some() {
+                "new_session_min_running_request"
+            } else {
+                "no_session_min_running_request"
+            },
+            candidate_running_requests = ?selection.candidate_running_requests,
+            minimum_running_requests = selection.minimum_running_requests,
+            tie_break = selection.tie_break,
+            tie_break_hash = selection.tie_break_hash,
+            worker_url = %worker.url(),
+            running_requests_after_reservation = worker.load(),
+            "sticky_least_loaded selected worker"
+        );
     }
 
     pub fn session_count(&self) -> usize {
@@ -165,10 +223,12 @@ impl LoadBalancingPolicy for StickyLeastLoadedPolicy {
 
         let Some(session_id) = session_id else {
             let tie_break_key = request_text.unwrap_or("");
-            let index = Self::select_least_loaded(workers, &healthy_indices, tie_break_key);
+            let selection = Self::select_least_loaded(workers, &healthy_indices, tie_break_key);
+            let index = selection.index;
             let worker = workers[index].clone();
             drop(state);
             self.record_selection(&worker);
+            Self::log_least_loaded_selection(None, "request_text", &selection, &worker);
             return Some(index);
         };
 
@@ -189,10 +249,12 @@ impl LoadBalancingPolicy for StickyLeastLoadedPolicy {
                 let worker = workers[index].clone();
                 drop(state);
                 self.record_selection(&worker);
-                debug!(
+                info!(
                     session_id = session_id,
                     worker_url = %worker_url,
-                    "sticky session retained"
+                    selection = "existing_session",
+                    running_requests_after_reservation = worker.load(),
+                    "sticky_least_loaded routed session"
                 );
                 return Some(index);
             }
@@ -201,12 +263,14 @@ impl LoadBalancingPolicy for StickyLeastLoadedPolicy {
             info!(
                 session_id = session_id,
                 worker_url = %worker_url,
+                selection = "reassign_session",
                 reason = if expired { "expired" } else { "unavailable" },
-                "reassigning sticky session"
+                "sticky_least_loaded reassigning session"
             );
         }
 
-        let index = Self::select_least_loaded(workers, &healthy_indices, session_id);
+        let selection = Self::select_least_loaded(workers, &healthy_indices, session_id);
+        let index = selection.index;
         let worker_url = workers[index].url().to_string();
         state.sessions.insert(
             session_id.to_string(),
@@ -218,12 +282,7 @@ impl LoadBalancingPolicy for StickyLeastLoadedPolicy {
         let worker = workers[index].clone();
         drop(state);
         self.record_selection(&worker);
-        info!(
-            session_id = session_id,
-            worker_url = %worker_url,
-            running_requests = worker.load(),
-            "assigned sticky session"
-        );
+        Self::log_least_loaded_selection(Some(session_id), "session_id", &selection, &worker);
         Some(index)
     }
 
