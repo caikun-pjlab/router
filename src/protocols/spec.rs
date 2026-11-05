@@ -588,6 +588,14 @@ impl GenerationRequest for ChatCompletionRequest {
         // policies work without a key; consistent_hash/cache_aware will treat all as same bucket.
         String::new()
     }
+
+    fn session_id(&self) -> Option<String> {
+        typed_session_id(
+            self.session_params.as_ref(),
+            self.user.as_deref(),
+            Some(&self.other),
+        )
+    }
 }
 
 // ============= Regular Response =============
@@ -811,6 +819,14 @@ impl GenerationRequest for CompletionRequest {
 
     fn extract_text_for_routing(&self) -> String {
         self.prompt.extract_text_for_routing()
+    }
+
+    fn session_id(&self) -> Option<String> {
+        typed_session_id(
+            self.session_params.as_ref(),
+            self.user.as_deref(),
+            Some(&self.other),
+        )
     }
 }
 
@@ -1426,6 +1442,10 @@ impl GenerationRequest for ResponsesRequest {
                 .collect::<Vec<String>>()
                 .join(" "),
         }
+    }
+
+    fn session_id(&self) -> Option<String> {
+        self.user.clone().filter(|user| !user.is_empty())
     }
 }
 
@@ -2056,6 +2076,10 @@ impl GenerationRequest for GenerateRequest {
         // No text input found
         String::new()
     }
+
+    fn session_id(&self) -> Option<String> {
+        typed_session_id(self.session_params.as_ref(), None, Some(&self.other))
+    }
 }
 
 // ==================================================================
@@ -2091,6 +2115,10 @@ impl GenerationRequest for InferenceGenerateRequest {
             .map(|id| id.to_string())
             .collect::<Vec<String>>()
             .join(" ")
+    }
+
+    fn session_id(&self) -> Option<String> {
+        typed_session_id(None, None, Some(&self.other))
     }
 }
 
@@ -2218,6 +2246,10 @@ impl GenerationRequest for RerankRequest {
 
     fn extract_text_for_routing(&self) -> String {
         self.query.clone()
+    }
+
+    fn session_id(&self) -> Option<String> {
+        self.user.clone().filter(|user| !user.is_empty())
     }
 }
 
@@ -2349,6 +2381,10 @@ impl GenerationRequest for EmbeddingRequest {
             _ => String::new(),
         }
     }
+
+    fn session_id(&self) -> Option<String> {
+        self.user.clone().filter(|user| !user.is_empty())
+    }
 }
 
 // ==================================================================
@@ -2370,6 +2406,36 @@ pub trait GenerationRequest: Send + Sync {
 
     /// Extract text content for routing decisions
     fn extract_text_for_routing(&self) -> String;
+
+    /// Extract an explicit session ID without falling back to request content.
+    fn session_id(&self) -> Option<String> {
+        None
+    }
+}
+
+fn typed_session_id(
+    session_params: Option<&HashMap<String, serde_json::Value>>,
+    user: Option<&str>,
+    other: Option<&serde_json::Map<String, serde_json::Value>>,
+) -> Option<String> {
+    let session_value = |value: Option<&serde_json::Value>| match value? {
+        serde_json::Value::String(session_id) if !session_id.is_empty() => Some(session_id.clone()),
+        serde_json::Value::Number(number) => Some(number.to_string()),
+        _ => None,
+    };
+    let other_field = |field: &str| other.and_then(|other| other.get(field));
+
+    session_value(session_params.and_then(|params| params.get("session_id")))
+        .or_else(|| {
+            other_field("metadata")
+                .and_then(serde_json::Value::as_object)
+                .and_then(|metadata| metadata.get("user_id"))
+                .and_then(|user_id| session_value(Some(user_id)))
+        })
+        .or_else(|| user.filter(|user| !user.is_empty()).map(str::to_string))
+        .or_else(|| session_value(other_field("user")))
+        .or_else(|| session_value(other_field("session_id")))
+        .or_else(|| session_value(other_field("user_id")))
 }
 
 /// Helper type for string or array of strings
@@ -2495,6 +2561,30 @@ pub enum LoRAPath {
 mod tests {
     use super::*;
     use serde_json;
+
+    #[test]
+    fn typed_session_extraction_includes_flattened_fields() {
+        let chat: ChatCompletionRequest = serde_json::from_value(serde_json::json!({
+            "messages": [],
+            "session_id": "chat-session"
+        }))
+        .unwrap();
+        assert_eq!(chat.session_id().as_deref(), Some("chat-session"));
+
+        let completion: CompletionRequest = serde_json::from_value(serde_json::json!({
+            "prompt": "hello",
+            "user_id": 42
+        }))
+        .unwrap();
+        assert_eq!(completion.session_id().as_deref(), Some("42"));
+
+        let generate: GenerateRequest = serde_json::from_value(serde_json::json!({
+            "prompt": "hello",
+            "user": "generate-user"
+        }))
+        .unwrap();
+        assert_eq!(generate.session_id().as_deref(), Some("generate-user"));
+    }
 
     // ==================================================================
     // =  InferenceGenerateRequest (/inference/v1/generate) TESTS       =

@@ -5,7 +5,7 @@ A high-performance and light-weight request forwarding system for vLLM large sca
 ### Key Features
 
 - **Core Architecture**: Request routing framework and async processing patterns
-- **Load Balancing**: Multiple algorithms (cache-aware, power of two, consistent hashing, random, round robin)
+- **Load Balancing**: Multiple algorithms (cache-aware, power of two, consistent hashing, sticky least-loaded, random, round robin)
 - **Prefill-Decode Disaggregation**: Specialized routing for separated processing phases
 - **Service Discovery**: Kubernetes-native worker management and health monitoring
 - **Enterprise Features**: Circuit breakers, retry logic, metrics collection
@@ -76,6 +76,20 @@ vllm-router \
     --policy consistent_hash \
     --intra-node-data-parallel-size 8
 ```
+
+#### Sticky Least-Loaded Routing
+```bash
+# Keep sessions on one healthy worker while placing new sessions on the
+# worker with the fewest in-flight requests.
+export STICKY_LEAST_LOADED_SESSION_EXPIRATION_IN_S=7200
+
+lmdeploy-router \
+    --worker-urls http://worker1:8000 http://worker2:8000 \
+    --policy sticky_least_loaded \
+    --intra-node-data-parallel-size 1
+```
+
+See [Load Balancing Policies](docs/load_balancing/README.md) for session extraction, TTL, and route coverage.
 
 #### Prefill-Decode Disaggregation
 ```bash

@@ -11,12 +11,13 @@ use std::sync::Arc;
 mod cache_aware;
 mod consistent_hash;
 mod factory;
-mod hash_key;
+pub(crate) mod hash_key;
 mod power_of_two;
 mod random;
 mod registry;
 mod rendezvous_hash;
 mod round_robin;
+mod sticky_least_loaded;
 
 pub use cache_aware::CacheAwarePolicy;
 pub use consistent_hash::ConsistentHashPolicy;
@@ -27,6 +28,7 @@ pub use random::RandomPolicy;
 pub use registry::PolicyRegistry;
 pub use rendezvous_hash::RendezvousHashPolicy;
 pub use round_robin::RoundRobinPolicy;
+pub use sticky_least_loaded::StickyLeastLoadedPolicy;
 
 /// HTTP headers passed to policies for routing decisions
 /// Key is lowercase header name, value is header value
@@ -60,6 +62,20 @@ pub trait LoadBalancingPolicy: Send + Sync + Debug {
         request_text: Option<&str>,
         headers: Option<&RequestHeaders>,
     ) -> Option<usize>;
+
+    /// Select a worker with an already-extracted session ID.
+    ///
+    /// Typed request handlers can extract the session from their request
+    /// representation without reparsing serialized JSON.
+    fn select_worker_with_session(
+        &self,
+        workers: &[Arc<dyn Worker>],
+        request_text: Option<&str>,
+        headers: Option<&RequestHeaders>,
+        _session_id: Option<&str>,
+    ) -> Option<usize> {
+        self.select_worker_with_headers(workers, request_text, headers)
+    }
 
     /// Select a pair of workers (prefill and decode) for PD routing
     ///
@@ -108,6 +124,14 @@ pub trait LoadBalancingPolicy: Send + Sync + Debug {
     /// Check if this policy needs HTTP headers for routing decisions
     fn needs_headers(&self) -> bool {
         false // Default: most policies don't need headers
+    }
+
+    /// Whether selection itself increments the selected worker's running load.
+    ///
+    /// The router uses this to pair every selection with exactly one decrement
+    /// when the response completes.
+    fn starts_running_load(&self) -> bool {
+        false
     }
 
     /// Update worker load information
