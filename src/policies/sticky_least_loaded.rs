@@ -114,25 +114,24 @@ impl StickyLeastLoadedPolicy {
             .min()
             .expect("healthy worker indices are non-empty");
 
-        let selected_index = loads
-            .iter()
-            .filter(|&&(_, load)| load == minimum_load)
-            .max_by_key(|&&(index, _)| {
-                let hash_key = format!("{}:{}", tie_break_key, workers[index].url());
-                ConsistentHashPolicy::fbi_hash(&hash_key)
-            })
-            .map(|&(index, _)| index)
-            .expect("at least one worker has the minimum load");
+        let mut minimum_candidates = 0;
+        let mut selected = None;
+        for &(index, load) in &loads {
+            if load != minimum_load {
+                continue;
+            }
 
-        let minimum_candidates = loads
-            .iter()
-            .filter(|&&(_, load)| load == minimum_load)
-            .count();
-        let tie_break_hash = ConsistentHashPolicy::fbi_hash(&format!(
-            "{}:{}",
-            tie_break_key,
-            workers[selected_index].url()
-        ));
+            minimum_candidates += 1;
+            let hash_key = format!("{}:{}", tie_break_key, workers[index].url());
+            let hash = ConsistentHashPolicy::fbi_hash(&hash_key);
+            match selected {
+                Some((_, selected_hash)) if hash < selected_hash => {}
+                _ => selected = Some((index, hash)),
+            }
+        }
+
+        let (selected_index, tie_break_hash) =
+            selected.expect("at least one worker has the minimum load");
 
         LeastLoadedSelection {
             index: selected_index,
