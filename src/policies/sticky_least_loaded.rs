@@ -35,9 +35,8 @@ struct SessionState {
 }
 
 #[derive(Debug)]
-struct LeastLoadedSelection<'a> {
+struct LeastLoadedSelection {
     index: usize,
-    candidate_running_requests: Vec<(&'a str, usize)>,
     minimum_running_requests: usize,
     tie_break: &'static str,
     tie_break_hash: u64,
@@ -99,11 +98,11 @@ impl StickyLeastLoadedPolicy {
         state.last_sweep = now;
     }
 
-    fn select_least_loaded<'a>(
-        workers: &'a [Arc<dyn Worker>],
+    fn select_least_loaded(
+        workers: &[Arc<dyn Worker>],
         healthy_indices: &[usize],
         tie_break_key: &str,
-    ) -> LeastLoadedSelection<'a> {
+    ) -> LeastLoadedSelection {
         let loads: Vec<(usize, usize)> = healthy_indices
             .iter()
             .map(|&index| (index, workers[index].load()))
@@ -137,10 +136,6 @@ impl StickyLeastLoadedPolicy {
 
         LeastLoadedSelection {
             index: selected_index,
-            candidate_running_requests: loads
-                .iter()
-                .map(|&(index, load)| (workers[index].url(), load))
-                .collect(),
             minimum_running_requests: minimum_load,
             tie_break: if minimum_candidates == 1 {
                 "unique_minimum"
@@ -162,7 +157,7 @@ impl StickyLeastLoadedPolicy {
     fn log_least_loaded_selection(
         session_id: Option<&str>,
         tie_break_key_source: &'static str,
-        selection: &LeastLoadedSelection<'_>,
+        selection: &LeastLoadedSelection,
         worker: &Arc<dyn Worker>,
     ) {
         info!(
@@ -173,7 +168,6 @@ impl StickyLeastLoadedPolicy {
             } else {
                 "no_session_min_running_request"
             },
-            candidate_running_requests = ?selection.candidate_running_requests,
             minimum_running_requests = selection.minimum_running_requests,
             tie_break = selection.tie_break,
             tie_break_hash = selection.tie_break_hash,
