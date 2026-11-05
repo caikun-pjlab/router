@@ -344,8 +344,12 @@ async fn v1_chat_completions(
 async fn v1_completions(
     State(state): State<Arc<AppState>>,
     headers: http::HeaderMap,
-    Json(body): Json<CompletionRequest>,
+    body: Result<Json<CompletionRequest>, JsonRejection>,
 ) -> Response {
+    let body = match body {
+        Ok(Json(body)) => body,
+        Err(rejection) => return openai_json_rejection(rejection),
+    };
     if let Err(response) = authorize_request(&state, &headers).await {
         return response;
     }
