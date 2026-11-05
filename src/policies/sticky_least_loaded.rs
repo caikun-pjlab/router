@@ -19,7 +19,7 @@ use crate::core::Worker;
 use crate::metrics::RouterMetrics;
 
 pub const DEFAULT_SESSION_EXPIRATION_SECS: u64 = 7200;
-pub const SESSION_EXPIRATION_ENV: &str = "VLLM_ROUTER_SLL_SESSION_EXPIRATION_IN_S";
+pub const SESSION_EXPIRATION_ENV: &str = "STICKY_LEAST_LOADED_SESSION_EXPIRATION_IN_S";
 const SWEEP_INTERVAL_SECS: u64 = 60;
 
 #[derive(Debug)]

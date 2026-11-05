@@ -81,7 +81,7 @@ vllm-router \
 ```bash
 # Keep sessions on one healthy worker while placing new sessions on the
 # worker with the fewest in-flight requests.
-export VLLM_ROUTER_SLL_SESSION_EXPIRATION_IN_S=7200
+export STICKY_LEAST_LOADED_SESSION_EXPIRATION_IN_S=7200
 
 lmdeploy-router \
     --worker-urls http://worker1:8000 http://worker2:8000 \

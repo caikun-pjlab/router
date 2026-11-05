@@ -139,7 +139,7 @@ lmdeploy-router \
   --worker-urls http://worker1:8000 http://worker2:8000
 ```
 
-Sticky-session TTL is controlled by `VLLM_ROUTER_SLL_SESSION_EXPIRATION_IN_S` and defaults to `7200` seconds. Invalid values emit a warning and use the default. There is no `finish_session` API; the router increments running requests during selection and decrements them when the response body completes, errors, or is dropped.
+Sticky-session TTL is controlled by `STICKY_LEAST_LOADED_SESSION_EXPIRATION_IN_S` and defaults to `7200` seconds. Invalid values emit a warning and use the default. There is no `finish_session` API; the router increments running requests during selection and decrements them when the response body completes, errors, or is dropped.
 
 Session IDs use the explicit headers listed for consistent hashing, except `X-Request-ID` and `X-Trace-ID` are excluded because they identify individual HTTP requests rather than conversations. Header values take priority over body values. Supported body fields are `session_params.session_id`, `metadata.user_id` (Anthropic), `user`, `session_id`, and `user_id`.
 
