@@ -167,8 +167,11 @@ mod completion_json_errors {
                 assert_eq!(resp.headers()[CONTENT_TYPE], "application/json");
                 let body = axum::body::to_bytes(resp.into_body(), 4096).await.unwrap();
                 let error: serde_json::Value = serde_json::from_slice(&body).unwrap();
-                assert_eq!(error["error"]["type"], "invalid_request_error");
-                assert!(!error["error"]["message"].as_str().unwrap().is_empty());
+                assert_eq!(error["type"], "invalid_request_error");
+                assert_eq!(error["code"], json!(400));
+                assert_eq!(error["object"], "error");
+                assert!(error["param"].is_null());
+                assert!(!error["message"].as_str().unwrap().is_empty());
             }
         }
         ctx.shutdown().await;
@@ -200,9 +203,60 @@ mod completion_json_errors {
             assert_eq!(resp.headers()[CONTENT_TYPE], "application/json");
             let body = axum::body::to_bytes(resp.into_body(), 4096).await.unwrap();
             let error: serde_json::Value = serde_json::from_slice(&body).unwrap();
-            assert_eq!(error["error"]["type"], "invalid_request_error");
-            assert!(!error["error"]["message"].as_str().unwrap().is_empty());
+            assert_eq!(error["type"], "invalid_request_error");
+            assert_eq!(error["code"], json!(400));
+            assert_eq!(error["object"], "error");
+            assert!(error["param"].is_null());
+            assert!(!error["message"].as_str().unwrap().is_empty());
         }
+        ctx.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn json_rejection_bodies_match_endpoint_error_contracts() {
+        let ctx = TestContext::new(vec![]).await;
+        let app = ctx.create_app().await;
+        let bodies = [
+            (
+                "/v1/chat/completions",
+                r#"{"model":"test-model","messages":[{"role":"user","content":"hi"}],"max_tokens":-1}"#,
+            ),
+            (
+                "/v1/completions",
+                r#"{"model":"test-model","prompt":"hi","max_tokens":-1}"#,
+            ),
+        ];
+        for (uri, payload) in bodies {
+            let req = Request::builder()
+                .method("POST")
+                .uri(uri)
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(payload.to_string()))
+                .unwrap();
+            let resp = app.clone().oneshot(req).await.unwrap();
+            assert_eq!(resp.status(), StatusCode::BAD_REQUEST, "{uri}");
+            let body = axum::body::to_bytes(resp.into_body(), 4096).await.unwrap();
+            let error: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(error["type"], "invalid_request_error", "{uri}");
+            assert_eq!(error["code"], json!(400), "{uri}");
+            assert_eq!(error["object"], "error", "{uri}");
+            assert!(error.get("error").is_none(), "{uri}");
+            assert!(!error["message"].as_str().unwrap().is_empty(), "{uri}");
+        }
+        let req = Request::builder()
+            .method("POST")
+            .uri("/v1/responses")
+            .header(CONTENT_TYPE, "text/plain")
+            .body(Body::from("{}"))
+            .unwrap();
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        let body = axum::body::to_bytes(resp.into_body(), 4096).await.unwrap();
+        let error: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(error["error"]["type"], "invalid_request_error");
+        assert_eq!(error["error"]["code"], json!(400));
+        assert!(error.get("object").is_none());
+        assert!(!error["error"]["message"].as_str().unwrap().is_empty());
         ctx.shutdown().await;
     }
 
@@ -1573,7 +1627,9 @@ mod error_tests {
         assert_eq!(resp.headers()[CONTENT_TYPE], "application/json");
         let body = axum::body::to_bytes(resp.into_body(), 4096).await.unwrap();
         let error: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(error["error"]["type"], "invalid_request_error");
+        assert_eq!(error["type"], "invalid_request_error");
+        assert_eq!(error["code"], json!(400));
+        assert_eq!(error["object"], "error");
 
         ctx.shutdown().await;
     }

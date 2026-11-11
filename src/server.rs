@@ -8,8 +8,8 @@ use crate::{
     policies::PolicyRegistry,
     protocols::{
         spec::{
-            ChatCompletionRequest, CompletionRequest, EmbeddingRequest, ErrorDetail, ErrorResponse,
-            GenerateRequest, InferenceGenerateRequest, RerankRequest, V1RerankReqInput,
+            ChatCompletionRequest, CompletionRequest, EmbeddingRequest, GenerateRequest,
+            InferenceGenerateRequest, RerankRequest, V1RerankReqInput,
         },
         worker_spec::{WorkerApiResponse, WorkerConfigRequest, WorkerErrorResponse},
     },
@@ -41,9 +41,6 @@ use tokio::{
     sync::{Mutex, RwLock},
 };
 use tracing::{error, info, warn, Level};
-
-#[cfg(test)]
-mod tests;
 
 #[derive(Clone)]
 pub struct AppContext {
@@ -153,22 +150,31 @@ async fn sink_handler() -> Response {
 }
 
 /// Normalize client JSON errors without changing body-read failures such as 413.
-fn openai_json_rejection(rejection: JsonRejection) -> Response {
+///
+/// The body mirrors the error shape of the engine endpoint being rejected:
+/// chat/completions use the flat form with an `object: "error"` field, responses
+/// the enveloped form; both carry a `code` matching the HTTP status.
+fn openai_json_rejection(path: &str, rejection: JsonRejection) -> Response {
     match rejection {
         JsonRejection::JsonDataError(_)
         | JsonRejection::JsonSyntaxError(_)
-        | JsonRejection::MissingJsonContentType(_) => (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: ErrorDetail {
-                    message: rejection.body_text(),
-                    error_type: "invalid_request_error".to_string(),
-                    param: None,
-                    code: None,
-                },
-            }),
-        )
-            .into_response(),
+        | JsonRejection::MissingJsonContentType(_) => {
+            let status = StatusCode::BAD_REQUEST;
+            let detail = json!({
+                "message": rejection.body_text(),
+                "type": "invalid_request_error",
+                "param": null,
+                "code": status.as_u16(),
+            });
+            let body = if matches!(path, "/v1/chat/completions" | "/v1/completions") {
+                let mut flat = detail;
+                flat["object"] = json!("error");
+                flat
+            } else {
+                json!({ "error": detail })
+            };
+            (status, Json(body)).into_response()
+        }
         _ => rejection.into_response(),
     }
 }
@@ -332,7 +338,7 @@ async fn v1_chat_completions(
 ) -> Response {
     let body = match body {
         Ok(Json(body)) => body,
-        Err(rejection) => return openai_json_rejection(rejection),
+        Err(rejection) => return openai_json_rejection("/v1/chat/completions", rejection),
     };
     if let Err(response) = authorize_request(&state, &headers).await {
         return response;
@@ -348,7 +354,7 @@ async fn v1_completions(
 ) -> Response {
     let body = match body {
         Ok(Json(body)) => body,
-        Err(rejection) => return openai_json_rejection(rejection),
+        Err(rejection) => return openai_json_rejection("/v1/completions", rejection),
     };
     if let Err(response) = authorize_request(&state, &headers).await {
         return response;
@@ -394,7 +400,7 @@ async fn v1_responses(
 ) -> Response {
     let body = match body {
         Ok(Json(body)) => body,
-        Err(rejection) => return openai_json_rejection(rejection),
+        Err(rejection) => return openai_json_rejection("/v1/responses", rejection),
     };
     if let Err(response) = authorize_request(&state, &headers).await {
         return response;
